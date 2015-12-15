@@ -44,9 +44,8 @@ Messaging With ActiveMQ Artemis
 == Messaging With ActiveMQ Artemis
 
 * ActiveMQ Artemis
-* Configuration Overview
-* Migration
-* High Availability
+* +messaging-activemq+ Subsystem
+* Compatibility & Migration
 * JMS 2.0
 
 == Apache ActiveMQ
@@ -64,18 +63,39 @@ Messaging With ActiveMQ Artemis
 * Code donation from Red Hat based on HornetQ
 * Non-blocking architecture (Netty / NIO)
 * High-performance NIO Journal
-* Supports many messaging protocols (AMQP, HornetQ Core, STOMP, MQTT)
+* Supports many messaging protocols (Core, AMQP, STOMP, MQTT, OpenWire, HornetQ)
 * Provides JMS 2.0 API
 
 == Architecture
 
-image::artemis-architecture.svg["Diagram", height=80]
+----
+
+                            +------------------+
+                            |  Artemis Server  |
+   +--------------+       +------+             |   +-------+
+   |Artemis client|--o )--| core |             |<->|Journal|
+   |  core (JMS)  |       +------+             |   +-------+
+   +--------------+         |                  |
+   +--------------+       +------+             |
+   | STOMP client |    )--|STOMP |             |               +--------------+
+   +--------------+       +------+             |<-- cluster -->|Artemis Server|
+   +--------------+       +------+             |               +--------------+
+   | MQTT client  |    )--| MQTT |             |
+   +--------------+       +------+             |
+                            |                  |
+                            +------------------+
+
+         connector --o )-- acceptor
+             in-vm/remote/http
+                 protocols
+----
 
 == Journal
 
 * Persistence store
   - Persistent messages, Bindings
   - Large messages
+  - Paging
 * Fast (NIO)
 * Faster (libAIO on Linux)
 * No JDBC (yet)
@@ -93,73 +113,223 @@ image::artemis-architecture.svg["Diagram", height=80]
 * New subsystem for WildFly 10 / EAP7
 * Powered by ActiveMQ Artemis
 * legacy +messaging+ subsystem
-  - not running anymore
-  - management model (admin-only mode)
+  - not runnable anymore
+  - management model (+admin-only+ mode)
 
 == +messaging-activemq+ Subsystem
 
 [source,java]
 ----
 legacy: /subsystem=messaging/hornetq-server=default
-new: /subsystem=messaging-activemq/server=default
-
-cd /subsystem=messaging-activemq/server=default
+new:    /subsystem=messaging-activemq/server=default
 ----
 
-== Configuration Overview
+== XML Configuration
 
-TODO
+[source,xml]
+----
+<subsystem xmlns="urn:jboss:domain:messaging-activemq:1.0">
+    <server name="default">
+    </server>
+</subsystem>
+----
+
+== HTTP Connectors & Acceptors
+
+[source,xml]
+----
+<!-- Acceptor handling HTTP ugprade -->
+<http-acceptor name="http-acceptor"
+               http-listener="default" /> <1>
+<!-- Connector using HTTP Upgrade -->
+<http-connector name="http-connector"
+                socket-binding="http"
+                endpoint="http-acceptor" />
+----
+<1> the +default+ http-listener is defined in +undertow+ subsystem
+
+== In-vm Connectors & Acceptors
+
+[source,xml]
+----
+<!-- Acceptor for in-vm communication -->
+<in-vm-acceptor name="in-vm"
+                server-id="0"/>
+<!-- Connector for in-vm communication -->
+<in-vm-connector name="in-vm"
+                 server-id="0"/>
+----
+
+== Remote Connectors & Acceptors
+
+[source,xml]
+----
+<remote-acceptor name="remote"
+                 socket-binding="messaging"/>
+<remote-connector name="remote"
+                  socket-binding="messaging">
+     <param name="batch-delay" value="${batch.delay:50}"/>
+</remote-connector>
+...
+<socket-binding name="messaging" port="61616"/>
+----
+
+* Superseded by +http-connector/acceptor+
+* Useful to connect to remote Artemis/A-MQ
+
+== Security Settings
+
+[source,xml]
+----
+<security-setting name="#"> <1>
+    <role name="guest"
+          send="true"
+          consume="true"
+          create-non-durable-queue="true"
+          delete-non-durable-queue="true"/>
+</security-setting>
+----
+<1> +#+ means _any_ Artemis address
+
+== Cluster resources
+
+* +broadcast-group+ -  Node announcement
+* +discovery-group+ - Node discovery
+* +cluster-connection+ - Load-balance messages between nodes
+* Artemis UDP stack or JGroups
+
+== +broadcast-group+ Resource
+
+[source,xml]
+----
+<broadcast-group name="bg-group1"
+                 connectors="http-connector"
+                 jgroups-channel="activemq-cluster"/> <1>
+----
+<1> Use default JGroups stack (+udp+)
+
+== +discovery-group+ Resource
+
+[source,xml]
+----
+<discovery-group name="dg-group1"
+                 jgroups-channel="activemq-cluster"/> <1>
+----
+<1> Use default JGroups stack (+udp+)
+
+== +cluster-connection+ Resource
+
+[source,xml]
+----
+<cluster-connection name="my-cluster"
+                    address="jms" <1>
+                    connector-name="http-connector" <2>
+                    discovery-group="dg-group1" />
+----
+<1> Any Artemis address _starting_ with +jms+ (i.e. all JMS destinations)
+<2> The connector sent to other nodes to connect to this node
+
+== JMS Destinations
+
+[source,xml]
+----
+<jms-queue name="myQueue"
+           entries="java:/jms/queue/myQueue"
+           selector="${selector:color='red'}"
+           durable="${durable:true}" />
+<jms-topic name="myTopic"
+           entries="java:/jms/queue/myTopic" />
+----
+
+== JMS Connection Factory
+
+[source,xml]
+----
+<connection-factory name="RemoteConnectionFactory"
+                    connectors="http-connector"
+                    entries="java:jboss/exported/jms/RemoteConnectionFactory" /> <1>
+----
+<1> Can be looked up by remote JMS clients
+
+== JMS Pooled Connection Factory
+
+* Use Artemis Resource Adapter
+* For MDBs and local JMS clients
+
+[source,xml]
+----
+<pooled-connection-factory name="activemq-ra"
+                           transaction="xa"
+                           connectors="in-vm"
+                           entries="java:/JmsXA java:jboss/DefaultJMSConnectionFactory"/><1>
+----
+<1> Provides the default JMS +ConnectionFactory+ for EE7 container
 
 == High-Availability
 
 * `/subsystem=messaging-activemq/server=default/ha-policy=...`
-  - +live-only+
-  - +shared-store-master+
-  - +shared-store-slave+
-  - +shared-store-colocated+
-  - +replication-master+
-  - +replication-slave+
-  - +replication-colocated+
+** no HA(!) but scale down
+*** +live-only+
+** Shared store (access to same file system)
+*** +shared-store-master+
+*** +shared-store-slave+
+*** +shared-store-colocated+
+** Replication (no shared state)
+*** +replication-master+
+*** +replication-slave+
+*** +replication-colocated+
 
 == Scaling Down Nodes
 
 * `shared-store-slave`, `replicated-slave`, `live-only` HA policy
 * Controls behaviour when Artemis nodes scale down (elastic cloud)
 * Transfer messages to other live servers
-* Handles server stops, not crashes
 
 == Compatibility [1/3]
 
-* Backward & Forward
-* Artemis clients (WFLY 10, EAP7) -> HornetQ server (AS7, WFLY 8 & 9, EAP6)
-* HornetQ clients (AS7, WFLY 8 & 9, EAP6) -> Artemis server (WFLY 10, EAP7)
+* Backward - new Artemis client -> old HornetQ server
+* Forward  - old HornetQ client -> new Artemis server
+
+----
+        "old"                   "new"
+AS7, WFLY 8 & 9, EAP6       WFLY 10, EAP7
+----
 
 == Backwards Compatibility [2/3]
 
-* Artemis client can connect to HornetQ server
+* New Artemis client can connect to old HornetQ server
+* No old server configuration change
 * Configure Artemis (+pooled-+)+connection-factory+ with +protocol-manager-factory=org.apache.activemq.artemis.core.protocol.hornetq.client.HornetQClientProtocolManagerFactory+
+and a +remote-connector+ pointing to old HornetQ server.
 * Use client-side JNDI (Artemis client will not be able to lookup objects in EAP6 JNDI)
 
 == Forwards Compatibility [3/3]
 
 * HornetQ client can connect to Artemis server
-* add +legacy-entries+ to +jms-queue+ and +jms-topic+ resources to bind HornetQ JMS destinations in JNDI
-* add +legacy-connection-factory+ resource to bind HornetQ JMS connection factories in JNDI
-* no modification to old client code
+* No modification to old client code
+* Add +legacy-entries+ attribute to +jms-queue+ and +jms-topic+ resources to bind HornetQ JMS destinations in JNDI
+* Add +legacy-connection-factory+ resource to bind HornetQ JMS connection factories in JNDI
 
-== Subsystem Migration
+== Subsystem Migration [1/3]
 
 . boot a EAP7 server in +admin-only+ mode with EAP6 configuration
 . run `/subsystem=messaging:migrate`
 . +reload+ in normal mode
 
-== Subsystem Migration
+== Subsystem Migration [2/3]
 
 * +describe-migration+ operation lists all the operations used to migrate the legacy +messaging+ subsystem
-* contains a list of +migration-warnings+ for every resource or attribute that can not be automatically migrated
+* Contains a list of +migration-warnings+ for every resource or attribute that can not be automatically migrated
 * +add-legacy-entries+ operation parameter to maintain legacy JMS resources with their JNDI entries
   - add +legacy-entries+ to +jms-topic+ & +jms-queue+ resources, their regular entries have +-new+ suffix
-  - add +legacy-connection-factory resource+, migrated +connection-factory+ resource has +-new+ suffix for its entries
+  - add +legacy-connection-factory+ resource, migrated +connection-factory+ resource has +-new+ suffix for its entries
+
+== Subsystem Migration [3/3]
+
+* Interceptors are not migrated (base class has changed)
+* No +legacy-connection-factory+ for +connection-factory+ referencing +invm-connector+
+* Migrated +discovery-group+ & +broadcast-group+ must use +socket-binding+ or +jgroups+ (no more +host+, +port+ attributes)
+* Migration of HA policy is a best effort depending on the values of +backup+ & +shared-store+ values
 
 == Migration of Data (offline mode)
 
@@ -185,6 +355,13 @@ Migration of all journal data
 old: /subsystem=messaging/jms-bridge=XXX
 new: /subsystem=messaging-activemq/jms-bridge=YYY
 ----
+
+== Remote JBoss A-MQ 7 Provider
+
+* JBoss A-MQ 7.x (Artemis)
+* For STOMP, AMQP, MQTT & OpenWire protocols
+* Configured with a +pooled-connection-factory+
+* Example after JMS 2 API introduction
 
 == Dive into JMS 2.0
 
@@ -444,643 +621,69 @@ public class MyMDB implements MessageListener {
 <1> standard portable property to lookup the connection factory
 <2> standard portable property to lookup the destination
 
-
-
-
-
-
-
-
-
-
-
-== Undertow
-
- * Architecture
- * Configuration overview
- * HTTP Upgrade (Port reduction)
- * Undertow handlers and predicates
- * Undertow as a load balancer
- * Servlet 3.1
- * Servlet Extensions
- * Undertow.js
- * HTTP/2
- * Web Sockets
-
-
-== Undertow
-
- * New webserver project integrated in WildFly 10/EAP7
- * Embeddable with a fluent API
- * Servlet 3.1 container
- * Websocket implementation
- * Supports HTTP Upgrade
- * Supports the use of high performance non-blocking handlers in servlet deployments
- * Contains a high performance reverse proxy implementation
-
-== Architecture
- * An undertow server consists of one or more listeners and one or more `HttpHandler` instances
- * Requests come in through a listener
- * Once a request has been fully read a +HttpServerExchange+ object is constructed, this object represents both the request and response
- * The +HttpServerExchange+ is then passed to the first `HttpHandler`
- * The +HttpHandler+ can then do work on the exchange, or delegate to another handler
- * Undertow provides a large number of pre existing handlers, including handlers that provide a Servlet implementation
-
-== The Server
-
-=== HTTP Handlers
- * Handlers perform actions on the exchange, e.g. setting headers, writing a response etc
- * The Undertow Servlet implementation is implemented as a series of handlers
- * The security implementation is also a series of handlers, most of which is usable outside of Servlet
-
-=== The HttpServerExchange
- * Represents both the request and the response
- * Lets you get/set headers, write response etc
- * Can have arbitrary data attached to it via the use of attachments
- * Can read/write request/response via blocking or non-blocking IO
-
-== The HttpHandler interface
+== Remote JBoss A-MQ 7 Provider [1/4]
 
 [source,java]
 ----
-public interface HttpHandler {
-    void handleRequest(HttpServerExchange exchange) throws Exception;
-}
+/socket-binding-group=standard-sockets/remote-destination-outbound-socket-binding=remote-artemis:add(host=<server host>, port=61616) //<1>
+
+/subsystem=messaging-activemq/server=default/remote-connector=remote-artemis:add(socket-binding=remote-artemis)
+
+/subsystem=messaging-activemq/server=default/pooled-connection-factory=remote-artemis:add(connectors=[remote-artemis], entries=[java:/jms/remoteCF])
 ----
+<1> Artemis multi-protocol port (including Core protocol)
 
-== HttpHandler example
-[source,java]
-----
+== Remote JBoss A-MQ 7 Provider [2/4]
 
-public class SetHeaderHandler implements HttpHandler {
-
-    private final HttpString header;
-    private final String value;
-    private final HttpHandler next;
-
-    public SetHeaderHandler(HttpHandler next, final String header, final String value) {
-        this.next = next;
-        this.value = value
-        this.header = new HttpString(header);
-    }
-
-    @Override
-    public void handleRequest(final HttpServerExchange exchange) throws Exception {
-        exchange.getResponseHeaders().put(header, value);
-        next.handleRequest(exchange);
-    }
-}
-
-----
-
-== Blocking and Non Blocking IO
- * Undertow connectors always use non-blocking IO
- * Initially handlers are run in an IO thread, they cannot perform blocking actions
- * An exchange can be dispatched to an executor in order to allow it to perform blocking tasks
- * By default an exchange will use non-blocking IO
-
-== Undertow Flow Diagram
-
-image::architecture.svg["Diagram", height=60]
-
-
-== Undertow config
- * Undertow configuration is provided by the Undertow Subsystem and the IO subsystem
- * IO subsystem configures XNIO worker and buffer pools
- * Everything else configured in Undertow subsystem
-
-== IO Subsystem
-
-[source,xml]
-----
-        <subsystem xmlns="urn:jboss:domain:io:1.1">
-            <worker name="default"/>
-            <buffer-pool name="default"/>
-        </subsystem>
-----
-
-* Worker provides the thread pool and IO threads
-* Defaults to CPU * 16 worker threads, CPU count * 2 IO threads
-* Buffer pool provides the buffers that Undertow uses for IO
-* Defaults to 16kb which should give optimal performance (unless available heap is <= 128mb)
-
-== Undertow subsystem
-[source,xml]
-----
-<subsystem xmlns="urn:jboss:domain:undertow:3.0">
-    <buffer-cache name="default"/>
-    <server name="default-server">
-        <http-listener name="default" socket-binding="http" redirect-socket="https"/>
-        <host name="default-host" alias="localhost">
-            <location name="/" handler="welcome-content"/>
-            <filter-ref name="server-header"/>
-            <filter-ref name="x-powered-by-header"/>
-        </host>
-    </server>
-    <servlet-container name="default">
-        <jsp-config/>
-        <websockets/>
-    </servlet-container>
-    <handlers>
-        <file name="welcome-content" path="${jboss.home.dir}/welcome-content"/>
-    </handlers>
-    <filters>
-        <response-header name="server-header" header-name="Server" header-value="WildFly/10"/>
-        <response-header name="x-powered-by-header" header-name="X-Powered-By" header-value="Undertow/1"/>
-    </filters>
-</subsystem>
-----
-
-== Buffer cache
-
-[source,xml]
-----
-    <buffer-cache name="default" buffer-size="1024" buffers-per-region="1024" max-regions="10"/>
-----
-
-* The buffer cache is used to cache static resources for maximum performance
-* Defaults to 10mb
-* Multiple caches can be configured, so different deployments use different cache sizes
-
-== Servlet Container
-
-[source,xml]
-----
-<servlet-container name="default" allow-non-standard-wrappers="false" default-session-timeout="30" >
-    <jsp-config/>
-    <websockets/>
-</servlet-container>
-----
-
-* Provides all Servlet, JSP and Websocket related config, including session related config
-* Most config can be overriden in web.xml
-* JSP config is the same as EAP6
-* It is possible to configure multiple Servlet containers, to allow multiple deployments to be deployed to the same context path on different virtual hosts
-* Websockets can be disabled by removing the config
-* http://wildscribe.github.io/Wildfly/9.0.0.CR2/subsystem/undertow/servlet-container/index.html
-
-== Handlers and filters
-
-[source,xml]
-----
-<handlers>
-    <file name="welcome-content" path="${jboss.home.dir}/welcome-content"/>
-</handlers>
-<filters>
-    <response-header name="server-header" header-name="Server" header-value="WildFly/10"/>
-    <response-header name="x-powered-by-header" header-name="X-Powered-By" header-value="Undertow/1"/>
-    <expression-filter name="myfilter" expression="method[POST] -> header[name=my-header, value=my-value]" />
-</filters>
-----
-
-* File handlers serve static files, they must be attached to a location in a virtual host
-* Filters modify some aspect of the request (although they are still just `HttpHandler` implementations)
-* Common use cases are setting headers or GZIP compression
-* Functionally equivalent to global valves
-* Predicates can be used to control when they execute (more on this later)
-
-== Server Config
-
-[source,xml]
-----
-<server name="default-server">
-    <http-listener name="default" socket-binding="http" redirect-socket="https"/>
-    <host name="default-host" alias="localhost">
-        <location name="/" handler="welcome-content"/>
-        <filter-ref name="server-header"/>
-        <filter-ref name="x-powered-by-header"/>
-    </host>
-</server>
-----
-
-* Listeners are equivalent to EAP6 connectors, HTTP, HTTPS and AJP are supported
-* HTTP/2 is provided by setting `enable-http2` on the HTTP or HTTPS listener
-* The host element provides virtual host config
-* Multiple servers can be configured which allow deployments and servers to be completely isolated, may be useful in muti-tenant environments
-
-
-== Attributes, Predicates and Handlers
- * Undertow provides a built in DSL to configure handlers
- * There are handlers that provide similar functionality to EAP6 valves
- * DSL consists of attribute, predicates and handlers
- * Attributes allow you to reference properties of the request or response
- * Predicates allow you to make a decision based on the attributes of the request or response
- * Handlers allow you to perform an action based on the request or response
- * Undertow comes with a large number of built in handlers
- * DSL is extensible
-
-== Attributes
- * Used to specify the values that predicates act on
- * Also used in some other places such as access log configuration
-
-=== Examples
-
- * `%{i,Accept}` Incoming header
- * `%{o,Content-Length}` Outgoing header
- * `%u` Remote user that was authenticated
- * `%U` Requested URL path
- * And many more (see the docs)
-
-== Predicates
- * Return true or false based on the value of an attribute
- * Generally used to determine if a given handler should be run
-
-=== Examples
-
- * `path` Matches an exact path
- * `path-prefix` Matches the start of a path
- * `path-suffix` Matches the end of a path
- * `contains` Tests than an attribute contains a given string
- * `exists` Tests that an attribute is not null
- * `regex` Performs a regex match on an attribute
- * `equals` Tests that two atrributes are equal
- * `path-template` Path template match
- * `method` Matches a specific HTTP method
- * `auth-required` Matches authenticated requests
- * `secure` Returns true if the request marked as secure (i.e. using SSL)
-
-
-== Example predicates
-
-The following predicates all match POST requests:
+* MDB Inbound Configuration
 
 [source,java]
 ----
-method[POST]
-method[value=POST]
-equals[{%{METHOD}, POST}]
-equals[%m, "POST"]
-regex[pattern="POST", value="%m", full-match=true]
-----
+import org.jboss.ejb3.annotation.ResourceAdapter;
 
-== Example predicates (cont)
-
-Predicates can be combined
-
-[source,java]
-----
-not method[POST]
-method[POST] and path-prefix["/uploads"]
-path-template[value="/user/{username}/*"] and equals[%u, ${username}]
-regex[pattern="/user/(.*?)./.*", value=%U, full-match=true] and equals[%u, ${1}]
-----
-
-
-== Built in handlers
- * Handlers perform an action on the request
- * The `set` handler is a general purpose handler that can be used to modify almost any aspect of an exchange
-
-=== Examples
-
- * `rewrite` rewrites the request path
- * `set` sets an attribute on the exchange
- * `redirect` performs a redirect
- * `allowed-methods` limits the allowed methods
- * `disallowed-methods` limits the allowed methods
- * `trace` Handles HTTP TRACE requests
- * `dump-request` dumps requests to the log
- * `response-rate-limit` limits the response speed
- * `ip-access-control` provides IP based access control lists
- * And more...
-
-== Using handlers
- * Can be used in an `expression-filter` in the Undertow subsystem
- * Can be used in `WEB-INF/undertow-handlers.conf`
- * Most filters in the Undertow subsystem take an optional predicate that determines if the filter should run
-
-== Predicated handlers (e.g. undertow-handlers.conf)
-
-* General form is `predicate -> handler`, if no predicate is present handler is applied to every request.
-* If multiples handlers are tied to one predicate they can be chained by enclosing them in curly braces
-
-[source,java]
-----
-set[attribute=%{o, Content-Type}, value='application/json']
-path['/a'] -> redirect['/b']
-path-prefix['/a'] -> redirect['/b${remaining}']
-regex['/a(.*)'] -> { set[attribute='%{o,Location}', value='/b${1}']; response-code[302] }
-----
-
-== HTTP Upgrade
-
-=== What is it
-
- * HTTP Upgrade allows for a HTTP connection to be upgraded to another protocol.
- * Standard mechanism defined in the HTTP/1.1 RFC, most common use is to initiate a websocket connection
- * A HTTP client sends a request with the `Upgrade:` header to initiate the connection.
- * If the server accepts the upgrade it sends back a HTTP 101 response and hands off the socket to whatever handles the upgraded protocol
-
-=== Why use it?
-
- * It allows you to multiplex multiple protocols over the HTTP port
- * Makes firewall configuration simpler, and works around firewalls that block port other than 80 and 443
- * Removes need to configure multiple ports
-
-== Why is this important?
-
- * This allowed us to reduce the number of ports in the default EAP7 installation to 2
- * EJB, JMS and JNDI are multiplexed over the undertow subsystem port 8080
- * Management is multiplexed over the web management port 9990
- * This is very important for cloud scenarios such as OpenShift, where a single physical host can handle hundreds of instances
- * The only performance overhead is the initial HTTP request, otherwise it performs identically
-
-== HTTP Upgrade - Wildfly EJB example
-
-=== Client Request
-
-----
-GET / HTTP/1.1
-Host: example.com
-Upgrade: jboss-remoting
-Connection: Upgrade
-----
-
-=== Server Response
-
-----
-HTTP/1.1 101 Switching Protocols
-Upgrade: jboss-remoting
-Connection: Upgrade
-----
-
-
-== Reverse Proxy
-
- * Undertow has the ability to act as a high performance reverse proxy
- * Handles  AJP, HTTP and HTTP/2 backends
- * Supports mod_cluster
- * Configuration different for static proxy and mod_cluster based proxy
-
-== Configuring the static reverse proxy
-
- * The proxy is configured with a static host list
- * Can then be added to locations under a virtual host
- * All requests to this location are forwarded
-
-[source,java]
-----
-/socket-binding-group=standard-sockets/remote-destination-outbound-socket-binding=proxy:add(source-interface=public, host=localhost, port=1111)
-/subsystem=undertow/configuration=handler/reverse-proxy=myproxy:add()
-/subsystem=undertow/configuration=handler/reverse-proxy=myproxy/host=http\:\/\/myhost\:8080:add(outbound-socket-binding=proxy)
-/subsystem=undertow/server=default-server/host=default-host/location=\/context:add(handler=myproxy)
-----
-
-== mod_cluster support
- * The mod_cluster implementation is based on the C version, ported to Java and modified to be based on Undertow
- * Functionality and operation should be basically similar
- * The management page no longer exists, instead it is monitored and managed via the management API (e.g. CLI)
-
-=== Configuring a mod_cluster reverse proxy
- * The mod_cluster proxy handler acts as a filter
- * It will only act if it has a node registered that can handle the requests context and host
- * Otherwise the request will be passed to the local server to be handled
-
-=== Online resources
- * http://blog.eisele.net/2015/01/developer-interview-di-11-stuart-douglas-about-wildfly9-undertow.html
- * https://github.com/stuartwdouglas/modcluster-example
-
-== Configuring a mod_cluster reverse proxy
-
-[source,java]
-----
-/socket-binding-group=standard-sockets/socket-binding=modcluster:add(port=23364, multicast-address=224.0.1.105)
-/subsystem=undertow/configuration=filter/mod-cluster=modcluster:add(management-socket-binding=http, advertise-socket-binding=modcluster)
-/subsystem=undertow/server=default-server/host=default-host/filter-ref=modcluster:add
-----
-
-=== Runtime monitoring and Management
-* Runtime resources (nodes, contexts etc) can be managed under the mod-cluster resource
-* This includes all management operations that would have previously been done under the mod_cluster management page
-* http://wildscribe.github.io/Wildfly/9.0.0.CR2/subsystem/undertow/configuration/filter/mod-cluster/index.html
-
-
-== Servlet 3.1
-
- * Undertow provides a fully compliant Servlet 3.1 container
-
-=== Notable Changes
- * Async IO Support
- * HTTP Upgrade Support
-
-== Async IO
-
- * Servlet 3.1 now provides support for non-blocking IO
-
-=== Traditional IO
-
- * Uses a thread per connection model
- * Reads and writes are blocking, the operation will not return until the operation is complete
- * A large number of connection directly translates to a large number of threads
-
-=== Non-blocking IO
-
- * Read and write operation are non-blocking, instead a callback mechanism is used to let you know when the operation is complete
- * A single thread can handle a large number of connections
- * Programmers must be careful not to perform blocking operations within the IO thread
- * Non-blocking code is generally more complex to write than blocking code
-
-== Servlet 3.1 Async IO
-
-=== Performing an async write
- * Call `ServletRequest.startAsync()` to put the request into async mode
- * Call `ServletOutputStream.setWriteListener(WriteListener writeListener)` to put the stream into async mode
- * The write listener will be invoked after the current request has returned to the container
- * You *must* call `ServletOutputStream.isReady()` before calling `write()`
- * When `isReady()` returns true you can call `write()`
- * If the socket cannot write out all the data it will be queued, `write()` will always return immediately
- * When `isReady()` return false then you cannot write, you must return and the write listener will be invoked again
- once the stream is ready to write.
-
-== Performing an async write (cont)
-
-[source,java]
-----
-protected void doGet(final HttpServletRequest req, final HttpServletResponse resp) throws ServletException, IOException {
-    final AsyncContext context = req.startAsync();
-    final ServletOutputStream outputStream = resp.getOutputStream();
-    final String[] messages = {"Hello ", "async ", "world"};
-    outputStream.setWriteListener(new WriteListener() {
-        int pos = 0;
-        @Override
-        public synchronized void onWritePossible() throws IOException {
-            while (outputStream.isReady() && pos < messages.length()) {
-                outputStream.write(messages[pos++].getBytes());
-            }
-            if (pos == messages.length()) context.complete();
-        }
-    });
-}
-----
-
-== The Servlet Upgrade API
-
- * To upgrade the request we call `<T extends HttpUpgradeHandler> T HttpServletRequest.upgrade(Class<T> handlerClass)`
- * We are still responsible for checking for the `Upgrade` header, and setting and appropriate response headers
- * Once the request is finished the resulting `HttpUpgradeHandler` will take over the connection, and can send and receive
-  data via the provided `WebConnection` and its associated streams.
- * Upgraded connection can use the async IO capabilities of `ServletInputStream` and `ServletOutputStream`
-
-== The Servlet Upgrade API (cont)
-[source,java]
-----
-public class MyProtocolUpgradeFilter implements Filter {
-
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
-
-        HttpServletRequest req = (HttpServletRequest) request;
-        if("my-protocol".equals(req.getHeader("Upgrade"))) {
-            HttpServletResponse resp = (HttpServletResponse) response;
-            resp.setHeader("Upgrade", "my-protocol");
-            req.upgrade(MyProtocolHandler.class);
-            return;
-        }
-        chain.doFilter(request, response);
-    }
+  @ResourceAdapter("remote-artemis")
+ @MessageDriven(name = "MyMDB", activationConfig = {
     ...
-----
-
-== The Servlet Upgrade API Continued
-[source,java]
-----
-public interface HttpUpgradeHandler {
-
-    public void init(WebConnection wc);
-
-    public void destroy();
-}
-
-public interface WebConnection extends AutoCloseable {
-
-    public ServletInputStream getInputStream() throws IOException;
-
-    public ServletOutputStream getOutputStream() throws IOException;
-}
-----
-
-== Servlet Extensions
- * Undertow provides the ability to customise a deployment via the `io.undertow.servlet.ServletExtension` interface
- * Similar to a `ServletContainerInitializer` but more flexible, as any part of the deployment can be changed
- * Allows you to use native Undertow handlers in a servlet deployment, without incurring any servlet overhead
- * Gives you access to the `DeploymentInfo` structure, so you have access to the same API that Wildfly used to build the deployment
-
-[source,java]
-----
-public interface ServletExtension {
-    void handleDeployment(final DeploymentInfo d, final ServletContextImpl s);
-}
-----
-
-== Example Extension
-[source,java]
-----
-public void handleDeployment(final DeploymentInfo d, final ServletContextImpl s) {
-    d.addInitialHandlerChainWrapper(new HandlerWrapper() {
-        public HttpHandler wrap(final HttpHandler servletHandler) {
-            final ResourceHandler r = Handlers.resource(d.getResourceManager());
-            return Handlers.predicate(
-                Predicates.suffixs(".css", ".js"), r, servletHandler);
-        }
-    });
-}
-----
-
-
-
-
-
-== Undertow.js
- * Undertow.js allows you to use JavaScript to write HTTP and REST endpoints
- * Allows you to inject Java EE resources into your JavaScript handlers
- * Provides JavaScript wrappers for some Java EE objects (such as datasources)
- * Supports pluggable template engines
- * Supports declarative security
- * Supports websockets
- * Will be tech preview for EE7
- * For full details see http://wildfly.org/news/2015/08/10/Javascript-Support-In-Wildfly/
- * Also covered in the Undertow docs
-
-== Template Example
-
-[source,javascript]
-----
-$undertow
-    .onGet("/hello",
-        {template: 'hello.txt', headers: {"content-type": "text/plain"}},
-        [function ($exchange) {
-            return {name: 'Stuart'};
-        }]);
-----
-
-(hello.txt is a mustache template file)
-
-== JSON Example
-
-[source,javascript]
-----
-$undertow
-    .alias('db', 'jndi:java:jboss/datasources/ExampleDS')
-    .onGet("/rest/members",
-        {transactional: true, {roles_allowed: ["admin", "user"]}, headers: {"content-type": "application/json"}},
-        ['db', function ($exchange, db) {
-            return db.select("select * from members");
-        }]);
-----
-
-== HTTP/2
-
- * Will be tech preview in EAP7
- * Java 8 has no supported way of doing ALPN version negotiation that is required for HTTP/2
- * Requires an ALPN jar on the boot class path, specific to the version of the JVM in use
- * ALPN is planned for Java 9
- * Plans for OpenSSL bindings for EAP 7.1
- * h2c (non-SSL HTTP/2) can still be used, but it is not supported by major browsers, the main use case from an EAP7 point of view is as a replacement for AJP
-
-
-== Wildfly websocket support
-
- * Wildfly supports websockets using Undertow's websocket implementation
- * Provides support for the standard Java Web Socket API (JSR-356, a required part of EE7)
- * Because of this frameworks such as Atmosphere that use JSR-356 work out of the box
- * Undertow supports version 1.1 of JSR-356, and websockets are enabled by default
-
-== Annotated Server Endpoint Example
-
-[source,java]
-----
-@ServerEndpoint("/websocket/{name}") //note the URL template.
-public class HelloEndpoint {
-
-    @OnOpen //invoked when the client first connects
-    public void onOpen(final Session session) {
-        session.getAsyncRemote().sendText("hi");
-    }
-
-    @OnMessage //handles text messages
-    public String message(String message, @PathParam("name") String name) {
-        return "Hello " + name + " you sent" + message;
+}) 
+public class MyMDB implements MessageListener {
+      public void onMessage(Message message) {
+       ...
     }
 }
 ----
 
-== Another Annotated Server Endpoint Example
+== Remote JBoss A-MQ 7 Provider [3/4]
+
+* Outbound Connection Factory
 
 [source,java]
 ----
-@ServerEndpoint("/websocket/{name}") //note the URL template.
-public class HelloEndpoint {
+@Inject
+ @JMSConnectionFactory("java:/jms/remoteCF")
+ private JMSContext context;
+----
 
-    @OnMessage //handles binary messages
-    public byte[] binaryMessage(byte[] binaryMessage) {
-        return binaryMessage; //echo binary data
-    }
+== Remote JBoss A-MQ 7 Provider [4/4]
 
-    @OnClose //invoked when the connection is closed
-    public void onClose(final Session session) {
-        System.out.println("Connection closed");
-    }
+* disable JNDI lookup (on local EAP7 server)
+
+[source,java]
+----
+@ResourceAdapter("remote-artemis")
+@MessageDriven(name = "MyMDB", activationConfig = {
+     @ActivationConfigProperty(propertyName = "useJNDI",         propertyValue = "false"),
+     @ActivationConfigProperty(propertyName = "destination",     propertyValue = "myQueue"),
+     @ActivationConfigProperty(propertyName = "destinationType", propertyValue = "javax.jms.Queue"), 
+    @ActivationConfigProperty(propertyName = "acknowledgeMode", propertyValue = "Auto-acknowledge")
+})
+public class MyMDB implements MessageListener {
+      ...
 }
 ----
 
 == Links
- * http://wildscribe.github.io/
- * http://undertow.io
+
+* http://wildfly.org
+* http://activemq.apache.org/artemis/
+* https://docs.jboss.org/author/display/WFLY10/Messaging+configuration
+* http://wildscribe.github.io (WFLY 10 is not published yet)

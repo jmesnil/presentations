@@ -2474,13 +2474,10 @@ This module splits a long slide into multiple slides.
 ActiveMQ Artemis
 </li>
 <li class="">
-Configuration Overview
+<code>messaging-activemq</code> Subsystem
 </li>
 <li class="">
-Migration
-</li>
-<li class="">
-High Availability
+Compatibility &amp; Migration
 </li>
 <li class="">
 JMS 2.0
@@ -2526,7 +2523,7 @@ Non-blocking architecture (Netty / NIO)
 High-performance NIO Journal
 </li>
 <li class="">
-Supports many messaging protocols (AMQP, HornetQ Core, STOMP, MQTT)
+Supports many messaging protocols (Core, AMQP, STOMP, MQTT, OpenWire, HornetQ)
 </li>
 <li class="">
 Provides JMS 2.0 API
@@ -2535,7 +2532,27 @@ Provides JMS 2.0 API
 </section>
 <section class="slide">
 <h2>Architecture</h2>
-<img src="artemis-architecture.svg" alt="Diagram" class=""/>
+<div class="listingblock">
+<div class="content">
+<pre><tt>                            +------------------+
+                            |  Artemis Server  |
+   +--------------+       +------+             |   +-------+
+   |Artemis client|--o )--| core |             |&lt;-&gt;|Journal|
+   |  core (JMS)  |       +------+             |   +-------+
+   +--------------+         |                  |
+   +--------------+       +------+             |
+   | STOMP client |    )--|STOMP |             |               +--------------+
+   +--------------+       +------+             |&lt;-- cluster --&gt;|Artemis Server|
+   +--------------+       +------+             |               +--------------+
+   | MQTT client  |    )--| MQTT |             |
+   +--------------+       +------+             |
+                            |                  |
+                            +------------------+
+
+         connector --o )-- acceptor
+             in-vm/remote/http
+                 protocols</tt></pre>
+</div></div>
 </section>
 <section class="slide">
 <h2>Journal</h2>
@@ -2548,6 +2565,9 @@ Persistent messages, Bindings
 </li>
 <li class="">
 Large messages
+</li>
+<li class="">
+Paging
 </li>
 </ul>
 </li>
@@ -2595,10 +2615,10 @@ Powered by ActiveMQ Artemis
 legacy <code>messaging</code> subsystem
 <ul>
 <li class="">
-not running anymore
+not runnable anymore
 </li>
 <li class="">
-management model (admin-only mode)
+management model (<code>admin-only</code> mode)
 </li>
 </ul>
 </li>
@@ -2608,14 +2628,204 @@ management model (admin-only mode)
 <h2><code>messaging-activemq</code> Subsystem</h2>
 <div class="listingblock">
 <div class="content"><div class="highlight"><pre><span class="nl">legacy:</span> <span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">messaging</span><span class="o">/</span><span class="n">hornetq</span><span class="o">-</span><span class="n">server</span><span class="o">=</span><span class="k">default</span>
-<span class="k">new</span><span class="o">:</span> <span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">messaging</span><span class="o">-</span><span class="n">activemq</span><span class="o">/</span><span class="n">server</span><span class="o">=</span><span class="k">default</span>
-
-<span class="n">cd</span> <span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">messaging</span><span class="o">-</span><span class="n">activemq</span><span class="o">/</span><span class="n">server</span><span class="o">=</span><span class="k">default</span>
+<span class="k">new</span><span class="o">:</span>    <span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">messaging</span><span class="o">-</span><span class="n">activemq</span><span class="o">/</span><span class="n">server</span><span class="o">=</span><span class="k">default</span>
 </pre></div></div></div>
 </section>
 <section class="slide">
-<h2>Configuration Overview</h2>
-<p>TODO</p>
+<h2>XML Configuration</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;subsystem</span> <span class="na">xmlns=</span><span class="s">&quot;urn:jboss:domain:messaging-activemq:1.0&quot;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;server</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;/server&gt;</span>
+<span class="nt">&lt;/subsystem&gt;</span>
+</pre></div></div></div>
+</section>
+<section class="slide">
+<h2>HTTP Connectors &amp; Acceptors</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="c">&lt;!-- Acceptor handling HTTP ugprade --&gt;</span>
+<span class="nt">&lt;http-acceptor</span> <span class="na">name=</span><span class="s">&quot;http-acceptor&quot;</span>
+               <span class="na">http-listener=</span><span class="s">&quot;default&quot;</span> <span class="nt">/&gt;</span> <span class="nt"><b>&lt;1&gt;</b></span>
+<span class="c">&lt;!-- Connector using HTTP Upgrade --&gt;</span>
+<span class="nt">&lt;http-connector</span> <span class="na">name=</span><span class="s">&quot;http-connector&quot;</span>
+                <span class="na">socket-binding=</span><span class="s">&quot;http&quot;</span>
+                <span class="na">endpoint=</span><span class="s">&quot;http-acceptor&quot;</span> <span class="nt">/&gt;</span>
+</pre></div></div></div>
+<div class="colist arabic"><ol>
+<li>
+<p>
+the <code>default</code> http-listener is defined in <code>undertow</code> subsystem
+</p>
+</li>
+</ol></div>
+</section>
+<section class="slide">
+<h2>In-vm Connectors &amp; Acceptors</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="c">&lt;!-- Acceptor for in-vm communication --&gt;</span>
+<span class="nt">&lt;in-vm-acceptor</span> <span class="na">name=</span><span class="s">&quot;in-vm&quot;</span>
+                <span class="na">server-id=</span><span class="s">&quot;0&quot;</span><span class="nt">/&gt;</span>
+<span class="c">&lt;!-- Connector for in-vm communication --&gt;</span>
+<span class="nt">&lt;in-vm-connector</span> <span class="na">name=</span><span class="s">&quot;in-vm&quot;</span>
+                 <span class="na">server-id=</span><span class="s">&quot;0&quot;</span><span class="nt">/&gt;</span>
+</pre></div></div></div>
+</section>
+<section class="slide">
+<h2>Remote Connectors &amp; Acceptors</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;remote-acceptor</span> <span class="na">name=</span><span class="s">&quot;remote&quot;</span>
+                 <span class="na">socket-binding=</span><span class="s">&quot;messaging&quot;</span><span class="nt">/&gt;</span>
+<span class="nt">&lt;remote-connector</span> <span class="na">name=</span><span class="s">&quot;remote&quot;</span>
+                  <span class="na">socket-binding=</span><span class="s">&quot;messaging&quot;</span><span class="nt">&gt;</span>
+     <span class="nt">&lt;param</span> <span class="na">name=</span><span class="s">&quot;batch-delay&quot;</span> <span class="na">value=</span><span class="s">&quot;${batch.delay:50}&quot;</span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/remote-connector&gt;</span>
+...
+<span class="nt">&lt;socket-binding</span> <span class="na">name=</span><span class="s">&quot;messaging&quot;</span> <span class="na">port=</span><span class="s">&quot;61616&quot;</span><span class="nt">/&gt;</span>
+</pre></div></div></div>
+<ul>
+<li class="">
+Superseded by <code>http-connector/acceptor</code>
+</li>
+<li class="">
+Useful to connect to remote Artemis/A-MQ
+</li>
+</ul>
+</section>
+<section class="slide">
+<h2>Security Settings</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;security-setting</span> <span class="na">name=</span><span class="s">&quot;#&quot;</span><span class="nt">&gt;</span> <span class="nt"><b>&lt;1&gt;</b></span>
+    <span class="nt">&lt;role</span> <span class="na">name=</span><span class="s">&quot;guest&quot;</span>
+          <span class="na">send=</span><span class="s">&quot;true&quot;</span>
+          <span class="na">consume=</span><span class="s">&quot;true&quot;</span>
+          <span class="na">create-non-durable-queue=</span><span class="s">&quot;true&quot;</span>
+          <span class="na">delete-non-durable-queue=</span><span class="s">&quot;true&quot;</span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/security-setting&gt;</span>
+</pre></div></div></div>
+<div class="colist arabic"><ol>
+<li>
+<p>
+<code>#</code> means <em>any</em> Artemis address
+</p>
+</li>
+</ol></div>
+</section>
+<section class="slide">
+<h2>Cluster resources</h2>
+<ul>
+<li class="">
+<code>broadcast-group</code> -  Node announcement
+</li>
+<li class="">
+<code>discovery-group</code> - Node discovery
+</li>
+<li class="">
+<code>cluster-connection</code> - Load-balance messages between nodes
+</li>
+<li class="">
+Artemis UDP stack or JGroups
+</li>
+</ul>
+</section>
+<section class="slide">
+<h2><code>broadcast-group</code> Resource</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;broadcast-group</span> <span class="na">name=</span><span class="s">&quot;bg-group1&quot;</span>
+                 <span class="na">connectors=</span><span class="s">&quot;http-connector&quot;</span>
+                 <span class="na">jgroups-channel=</span><span class="s">&quot;activemq-cluster&quot;</span><span class="nt">/&gt;</span> <span class="nt"><b>&lt;1&gt;</b></span>
+</pre></div></div></div>
+<div class="colist arabic"><ol>
+<li>
+<p>
+Use default JGroups stack (<code>udp</code>)
+</p>
+</li>
+</ol></div>
+</section>
+<section class="slide">
+<h2><code>discovery-group</code> Resource</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;discovery-group</span> <span class="na">name=</span><span class="s">&quot;dg-group1&quot;</span>
+                 <span class="na">jgroups-channel=</span><span class="s">&quot;activemq-cluster&quot;</span><span class="nt">/&gt;</span> <span class="nt"><b>&lt;1&gt;</b></span>
+</pre></div></div></div>
+<div class="colist arabic"><ol>
+<li>
+<p>
+Use default JGroups stack (<code>udp</code>)
+</p>
+</li>
+</ol></div>
+</section>
+<section class="slide">
+<h2><code>cluster-connection</code> Resource</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;cluster-connection</span> <span class="na">name=</span><span class="s">&quot;my-cluster&quot;</span>
+                    <span class="na">address=</span><span class="s">&quot;jms&quot;</span> <span class="err">&lt;1</span><span class="nt">&gt;</span>
+                    connector-name=&quot;http-connector&quot; <span class="nt"><b>&lt;2&gt;</b></span>
+                    discovery-group=&quot;dg-group1&quot; /&gt;
+</pre></div></div></div>
+<div class="colist arabic"><ol>
+<li>
+<p>
+Any Artemis address <em>starting</em> with <code>jms</code> (i.e. all JMS destinations)
+</p>
+</li>
+<li>
+<p>
+The connector sent to other nodes to connect to this node
+</p>
+</li>
+</ol></div>
+</section>
+<section class="slide">
+<h2>JMS Destinations</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;jms-queue</span> <span class="na">name=</span><span class="s">&quot;myQueue&quot;</span>
+           <span class="na">entries=</span><span class="s">&quot;java:/jms/queue/myQueue&quot;</span>
+           <span class="na">selector=</span><span class="s">&quot;${selector:color=&#39;red&#39;}&quot;</span>
+           <span class="na">durable=</span><span class="s">&quot;${durable:true}&quot;</span> <span class="nt">/&gt;</span>
+<span class="nt">&lt;jms-topic</span> <span class="na">name=</span><span class="s">&quot;myTopic&quot;</span>
+           <span class="na">entries=</span><span class="s">&quot;java:/jms/queue/myTopic&quot;</span> <span class="nt">/&gt;</span>
+</pre></div></div></div>
+</section>
+<section class="slide">
+<h2>JMS Connection Factory</h2>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;connection-factory</span> <span class="na">name=</span><span class="s">&quot;RemoteConnectionFactory&quot;</span>
+                    <span class="na">connectors=</span><span class="s">&quot;http-connector&quot;</span>
+                    <span class="na">entries=</span><span class="s">&quot;java:jboss/exported/jms/RemoteConnectionFactory&quot;</span> <span class="nt">/&gt;</span> <span class="nt"><b>&lt;1&gt;</b></span>
+</pre></div></div></div>
+<div class="colist arabic"><ol>
+<li>
+<p>
+Can be looked up by remote JMS clients
+</p>
+</li>
+</ol></div>
+</section>
+<section class="slide">
+<h2>JMS Pooled Connection Factory</h2>
+<ul>
+<li class="">
+Use Artemis Resource Adapter
+</li>
+<li class="">
+For MDBs and local JMS clients
+</li>
+</ul>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nt">&lt;pooled-connection-factory</span> <span class="na">name=</span><span class="s">&quot;activemq-ra&quot;</span>
+                           <span class="na">transaction=</span><span class="s">&quot;xa&quot;</span>
+                           <span class="na">connectors=</span><span class="s">&quot;in-vm&quot;</span>
+                           <span class="na">entries=</span><span class="s">&quot;java:/JmsXA java:jboss/DefaultJMSConnectionFactory&quot;</span><span class="nt">/&gt;<b>&lt;1&gt;</b></span>
+</pre></div></div></div>
+<div class="colist arabic"><ol>
+<li>
+<p>
+Provides the default JMS <code>ConnectionFactory</code> for EE7 container
+</p>
+</li>
+</ol></div>
 </section>
 <section class="slide">
 <h2>High-Availability</h2>
@@ -2624,8 +2834,16 @@ management model (admin-only mode)
 <code>/subsystem=messaging-activemq/server=default/ha-policy=...</code>
 <ul>
 <li class="">
+no HA(!) but scale down
+<ul>
+<li class="">
 <code>live-only</code>
 </li>
+</ul>
+</li>
+<li class="">
+Shared store (access to same file system)
+<ul>
 <li class="">
 <code>shared-store-master</code>
 </li>
@@ -2635,6 +2853,11 @@ management model (admin-only mode)
 <li class="">
 <code>shared-store-colocated</code>
 </li>
+</ul>
+</li>
+<li class="">
+Replication (no shared state)
+<ul>
 <li class="">
 <code>replication-master</code>
 </li>
@@ -2643,6 +2866,8 @@ management model (admin-only mode)
 </li>
 <li class="">
 <code>replication-colocated</code>
+</li>
+</ul>
 </li>
 </ul>
 </li>
@@ -2660,33 +2885,36 @@ Controls behaviour when Artemis nodes scale down (elastic cloud)
 <li class="">
 Transfer messages to other live servers
 </li>
-<li class="">
-Handles server stops, not crashes
-</li>
 </ul>
 </section>
 <section class="slide">
 <h2>Compatibility [1/3]</h2>
 <ul>
 <li class="">
-Backward &amp; Forward
+Backward - new Artemis client &#8594; old HornetQ server
 </li>
 <li class="">
-Artemis clients (WFLY 10, EAP7) &#8594; HornetQ server (AS7, WFLY 8 &amp; 9, EAP6)
-</li>
-<li class="">
-HornetQ clients (AS7, WFLY 8 &amp; 9, EAP6) &#8594; Artemis server (WFLY 10, EAP7)
+Forward  - old HornetQ client &#8594; new Artemis server
 </li>
 </ul>
+<div class="listingblock">
+<div class="content">
+<pre><tt>        "old"                   "new"
+AS7, WFLY 8 &amp; 9, EAP6       WFLY 10, EAP7</tt></pre>
+</div></div>
 </section>
 <section class="slide">
 <h2>Backwards Compatibility [2/3]</h2>
 <ul>
 <li class="">
-Artemis client can connect to HornetQ server
+New Artemis client can connect to old HornetQ server
+</li>
+<li class="">
+No old server configuration change
 </li>
 <li class="">
 Configure Artemis (<code>pooled-</code>)<code>connection-factory</code> with <code>protocol-manager-factory=org.apache.activemq.artemis.core.protocol.hornetq.client.HornetQClientProtocolManagerFactory</code>
+and a <code>remote-connector</code> pointing to old HornetQ server.
 </li>
 <li class="">
 Use client-side JNDI (Artemis client will not be able to lookup objects in EAP6 JNDI)
@@ -2700,18 +2928,18 @@ Use client-side JNDI (Artemis client will not be able to lookup objects in EAP6 
 HornetQ client can connect to Artemis server
 </li>
 <li class="">
-add <code>legacy-entries</code> to <code>jms-queue</code> and <code>jms-topic</code> resources to bind HornetQ JMS destinations in JNDI
+No modification to old client code
 </li>
 <li class="">
-add <code>legacy-connection-factory</code> resource to bind HornetQ JMS connection factories in JNDI
+Add <code>legacy-entries</code> attribute to <code>jms-queue</code> and <code>jms-topic</code> resources to bind HornetQ JMS destinations in JNDI
 </li>
 <li class="">
-no modification to old client code
+Add <code>legacy-connection-factory</code> resource to bind HornetQ JMS connection factories in JNDI
 </li>
 </ul>
 </section>
 <section class="slide">
-<h2>Subsystem Migration</h2>
+<h2>Subsystem Migration [1/3]</h2>
 <ol>
 <li class="">
 <p>
@@ -2731,13 +2959,13 @@ run <code>/subsystem=messaging:migrate</code>
 </ol>
 </section>
 <section class="slide">
-<h2>Subsystem Migration</h2>
+<h2>Subsystem Migration [2/3]</h2>
 <ul>
 <li class="">
 <code>describe-migration</code> operation lists all the operations used to migrate the legacy <code>messaging</code> subsystem
 </li>
 <li class="">
-contains a list of <code>migration-warnings</code> for every resource or attribute that can not be automatically migrated
+Contains a list of <code>migration-warnings</code> for every resource or attribute that can not be automatically migrated
 </li>
 <li class="">
 <code>add-legacy-entries</code> operation parameter to maintain legacy JMS resources with their JNDI entries
@@ -2746,9 +2974,26 @@ contains a list of <code>migration-warnings</code> for every resource or attribu
 add <code>legacy-entries</code> to <code>jms-topic</code> &amp; <code>jms-queue</code> resources, their regular entries have <code>-new</code> suffix
 </li>
 <li class="">
-add <code>legacy-connection-factory resource</code>, migrated <code>connection-factory</code> resource has <code>-new</code> suffix for its entries
+add <code>legacy-connection-factory</code> resource, migrated <code>connection-factory</code> resource has <code>-new</code> suffix for its entries
 </li>
 </ul>
+</li>
+</ul>
+</section>
+<section class="slide">
+<h2>Subsystem Migration [3/3]</h2>
+<ul>
+<li class="">
+Interceptors are not migrated (base class has changed)
+</li>
+<li class="">
+No <code>legacy-connection-factory</code> for <code>connection-factory</code> referencing <code>invm-connector</code>
+</li>
+<li class="">
+Migrated <code>discovery-group</code> &amp; <code>broadcast-group</code> must use <code>socket-binding</code> or <code>jgroups</code> (no more <code>host</code>, <code>port</code> attributes)
+</li>
+<li class="">
+Migration of HA policy is a best effort depending on the values of <code>backup</code> &amp; <code>shared-store</code> values
 </li>
 </ul>
 </section>
@@ -2793,6 +3038,23 @@ EAP7&#8217;s <code>messaging-activemq</code> subsystem also provides a <code>jms
 <div class="content"><div class="highlight"><pre><span class="nl">old:</span> <span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">messaging</span><span class="o">/</span><span class="n">jms</span><span class="o">-</span><span class="n">bridge</span><span class="o">=</span><span class="n">XXX</span>
 <span class="k">new</span><span class="o">:</span> <span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">messaging</span><span class="o">-</span><span class="n">activemq</span><span class="o">/</span><span class="n">jms</span><span class="o">-</span><span class="n">bridge</span><span class="o">=</span><span class="n">YYY</span>
 </pre></div></div></div>
+</section>
+<section class="slide">
+<h2>Remote JBoss A-MQ 7 Provider</h2>
+<ul>
+<li class="">
+JBoss A-MQ 7.x (Artemis)
+</li>
+<li class="">
+For STOMP, AMQP, MQTT &amp; OpenWire protocols
+</li>
+<li class="">
+Configured with a <code>pooled-connection-factory</code>
+</li>
+<li class="">
+Example after JMS 2 API introduction
+</li>
+</ul>
 </section>
 <section class="slide">
 <h2>Dive into JMS 2.0</h2>
@@ -3275,1051 +3537,73 @@ standard portable property to lookup the destination
 </ol></div>
 </section>
 <section class="slide">
-<h2>Undertow</h2>
-<ul>
-<li class="">
-Architecture
-</li>
-<li class="">
-Configuration overview
-</li>
-<li class="">
-HTTP Upgrade (Port reduction)
-</li>
-<li class="">
-Undertow handlers and predicates
-</li>
-<li class="">
-Undertow as a load balancer
-</li>
-<li class="">
-Servlet 3.1
-</li>
-<li class="">
-Servlet Extensions
-</li>
-<li class="">
-Undertow.js
-</li>
-<li class="">
-HTTP/2
-</li>
-<li class="">
-Web Sockets
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Undertow</h2>
-<ul>
-<li class="">
-New webserver project integrated in WildFly 10/EAP7
-</li>
-<li class="">
-Embeddable with a fluent API
-</li>
-<li class="">
-Servlet 3.1 container
-</li>
-<li class="">
-Websocket implementation
-</li>
-<li class="">
-Supports HTTP Upgrade
-</li>
-<li class="">
-Supports the use of high performance non-blocking handlers in servlet deployments
-</li>
-<li class="">
-Contains a high performance reverse proxy implementation
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Architecture</h2>
-<ul>
-<li class="">
-An undertow server consists of one or more listeners and one or more <code>HttpHandler</code> instances
-</li>
-<li class="">
-Requests come in through a listener
-</li>
-<li class="">
-Once a request has been fully read a <code>HttpServerExchange</code> object is constructed, this object represents both the request and response
-</li>
-<li class="">
-The <code>HttpServerExchange</code> is then passed to the first <code>HttpHandler</code>
-</li>
-<li class="">
-The <code>HttpHandler</code> can then do work on the exchange, or delegate to another handler
-</li>
-<li class="">
-Undertow provides a large number of pre existing handlers, including handlers that provide a Servlet implementation
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>The Server</h2>
-<div class="sect2">
-<h3 id="_http_handlers">HTTP Handlers</h3>
-<ul>
-<li class="">
-Handlers perform actions on the exchange, e.g. setting headers, writing a response etc
-</li>
-<li class="">
-The Undertow Servlet implementation is implemented as a series of handlers
-</li>
-<li class="">
-The security implementation is also a series of handlers, most of which is usable outside of Servlet
-</li>
-</ul>
-</div>
-<div class="sect2">
-<h3 id="_the_httpserverexchange">The HttpServerExchange</h3>
-<ul>
-<li class="">
-Represents both the request and the response
-</li>
-<li class="">
-Lets you get/set headers, write response etc
-</li>
-<li class="">
-Can have arbitrary data attached to it via the use of attachments
-</li>
-<li class="">
-Can read/write request/response via blocking or non-blocking IO
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>The HttpHandler interface</h2>
+<h2>Remote JBoss A-MQ 7 Provider [1/4]</h2>
 <div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="kd">public</span> <span class="kd">interface</span> <span class="nc">HttpHandler</span> <span class="o">{</span>
-    <span class="kt">void</span> <span class="nf">handleRequest</span><span class="o">(</span><span class="n">HttpServerExchange</span> <span class="n">exchange</span><span class="o">)</span> <span class="kd">throws</span> <span class="n">Exception</span><span class="o">;</span>
-<span class="o">}</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>HttpHandler example</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="kd">public</span> <span class="kd">class</span> <span class="nc">SetHeaderHandler</span> <span class="kd">implements</span> <span class="n">HttpHandler</span> <span class="o">{</span>
+<div class="content"><div class="highlight"><pre><span class="o">/</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">-</span><span class="n">group</span><span class="o">=</span><span class="n">standard</span><span class="o">-</span><span class="n">sockets</span><span class="o">/</span><span class="n">remote</span><span class="o">-</span><span class="n">destination</span><span class="o">-</span><span class="n">outbound</span><span class="o">-</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">=</span><span class="n">remote</span><span class="o">-</span><span class="n">artemis</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">host</span><span class="o">=&lt;</span><span class="n">server</span> <span class="n">host</span><span class="o">&gt;,</span> <span class="n">port</span><span class="o">=</span><span class="mi">61616</span><span class="o">)</span> <span class="c1">//<b>&lt;1&gt;</b></span>
 
-    <span class="kd">private</span> <span class="kd">final</span> <span class="n">HttpString</span> <span class="n">header</span><span class="o">;</span>
-    <span class="kd">private</span> <span class="kd">final</span> <span class="n">String</span> <span class="n">value</span><span class="o">;</span>
-    <span class="kd">private</span> <span class="kd">final</span> <span class="n">HttpHandler</span> <span class="n">next</span><span class="o">;</span>
+<span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">messaging</span><span class="o">-</span><span class="n">activemq</span><span class="o">/</span><span class="n">server</span><span class="o">=</span><span class="k">default</span><span class="o">/</span><span class="n">remote</span><span class="o">-</span><span class="n">connector</span><span class="o">=</span><span class="n">remote</span><span class="o">-</span><span class="n">artemis</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">=</span><span class="n">remote</span><span class="o">-</span><span class="n">artemis</span><span class="o">)</span>
 
-    <span class="kd">public</span> <span class="nf">SetHeaderHandler</span><span class="o">(</span><span class="n">HttpHandler</span> <span class="n">next</span><span class="o">,</span> <span class="kd">final</span> <span class="n">String</span> <span class="n">header</span><span class="o">,</span> <span class="kd">final</span> <span class="n">String</span> <span class="n">value</span><span class="o">)</span> <span class="o">{</span>
-        <span class="k">this</span><span class="o">.</span><span class="na">next</span> <span class="o">=</span> <span class="n">next</span><span class="o">;</span>
-        <span class="k">this</span><span class="o">.</span><span class="na">value</span> <span class="o">=</span> <span class="n">value</span>
-        <span class="k">this</span><span class="o">.</span><span class="na">header</span> <span class="o">=</span> <span class="k">new</span> <span class="n">HttpString</span><span class="o">(</span><span class="n">header</span><span class="o">);</span>
-    <span class="o">}</span>
+<span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">messaging</span><span class="o">-</span><span class="n">activemq</span><span class="o">/</span><span class="n">server</span><span class="o">=</span><span class="k">default</span><span class="o">/</span><span class="n">pooled</span><span class="o">-</span><span class="n">connection</span><span class="o">-</span><span class="n">factory</span><span class="o">=</span><span class="n">remote</span><span class="o">-</span><span class="n">artemis</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">connectors</span><span class="o">=[</span><span class="n">remote</span><span class="o">-</span><span class="n">artemis</span><span class="o">],</span> <span class="n">entries</span><span class="o">=[</span><span class="n">java</span><span class="o">:/</span><span class="n">jms</span><span class="o">/</span><span class="n">remoteCF</span><span class="o">])</span>
+</pre></div></div></div>
+<div class="colist arabic"><ol>
+<li>
+<p>
+Artemis multi-protocol port (including Core protocol)
+</p>
+</li>
+</ol></div>
+</section>
+<section class="slide">
+<h2>Remote JBoss A-MQ 7 Provider [2/4]</h2>
+<ul>
+<li class="">
+MDB Inbound Configuration
+</li>
+</ul>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="kn">import</span> <span class="nn">org.jboss.ejb3.annotation.ResourceAdapter</span><span class="o">;</span>
 
-    <span class="nd">@Override</span>
-    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">handleRequest</span><span class="o">(</span><span class="kd">final</span> <span class="n">HttpServerExchange</span> <span class="n">exchange</span><span class="o">)</span> <span class="kd">throws</span> <span class="n">Exception</span> <span class="o">{</span>
-        <span class="n">exchange</span><span class="o">.</span><span class="na">getResponseHeaders</span><span class="o">().</span><span class="na">put</span><span class="o">(</span><span class="n">header</span><span class="o">,</span> <span class="n">value</span><span class="o">);</span>
-        <span class="n">next</span><span class="o">.</span><span class="na">handleRequest</span><span class="o">(</span><span class="n">exchange</span><span class="o">);</span>
-    <span class="o">}</span>
-<span class="o">}</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>Blocking and Non Blocking IO</h2>
-<ul>
-<li class="">
-Undertow connectors always use non-blocking IO
-</li>
-<li class="">
-Initially handlers are run in an IO thread, they cannot perform blocking actions
-</li>
-<li class="">
-An exchange can be dispatched to an executor in order to allow it to perform blocking tasks
-</li>
-<li class="">
-By default an exchange will use non-blocking IO
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Undertow Flow Diagram</h2>
-<img src="architecture.svg" alt="Diagram" class=""/>
-</section>
-<section class="slide">
-<h2>Undertow config</h2>
-<ul>
-<li class="">
-Undertow configuration is provided by the Undertow Subsystem and the IO subsystem
-</li>
-<li class="">
-IO subsystem configures XNIO worker and buffer pools
-</li>
-<li class="">
-Everything else configured in Undertow subsystem
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>IO Subsystem</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre>        <span class="nt">&lt;subsystem</span> <span class="na">xmlns=</span><span class="s">&quot;urn:jboss:domain:io:1.1&quot;</span><span class="nt">&gt;</span>
-            <span class="nt">&lt;worker</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span><span class="nt">/&gt;</span>
-            <span class="nt">&lt;buffer-pool</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span><span class="nt">/&gt;</span>
-        <span class="nt">&lt;/subsystem&gt;</span>
-</pre></div></div></div>
-<ul>
-<li class="">
-Worker provides the thread pool and IO threads
-</li>
-<li class="">
-Defaults to CPU * 16 worker threads, CPU count * 2 IO threads
-</li>
-<li class="">
-Buffer pool provides the buffers that Undertow uses for IO
-</li>
-<li class="">
-Defaults to 16kb which should give optimal performance (unless available heap is &#8656; 128mb)
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Undertow subsystem</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="nt">&lt;subsystem</span> <span class="na">xmlns=</span><span class="s">&quot;urn:jboss:domain:undertow:3.0&quot;</span><span class="nt">&gt;</span>
-    <span class="nt">&lt;buffer-cache</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span><span class="nt">/&gt;</span>
-    <span class="nt">&lt;server</span> <span class="na">name=</span><span class="s">&quot;default-server&quot;</span><span class="nt">&gt;</span>
-        <span class="nt">&lt;http-listener</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span> <span class="na">socket-binding=</span><span class="s">&quot;http&quot;</span> <span class="na">redirect-socket=</span><span class="s">&quot;https&quot;</span><span class="nt">/&gt;</span>
-        <span class="nt">&lt;host</span> <span class="na">name=</span><span class="s">&quot;default-host&quot;</span> <span class="na">alias=</span><span class="s">&quot;localhost&quot;</span><span class="nt">&gt;</span>
-            <span class="nt">&lt;location</span> <span class="na">name=</span><span class="s">&quot;/&quot;</span> <span class="na">handler=</span><span class="s">&quot;welcome-content&quot;</span><span class="nt">/&gt;</span>
-            <span class="nt">&lt;filter-ref</span> <span class="na">name=</span><span class="s">&quot;server-header&quot;</span><span class="nt">/&gt;</span>
-            <span class="nt">&lt;filter-ref</span> <span class="na">name=</span><span class="s">&quot;x-powered-by-header&quot;</span><span class="nt">/&gt;</span>
-        <span class="nt">&lt;/host&gt;</span>
-    <span class="nt">&lt;/server&gt;</span>
-    <span class="nt">&lt;servlet-container</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span><span class="nt">&gt;</span>
-        <span class="nt">&lt;jsp-config/&gt;</span>
-        <span class="nt">&lt;websockets/&gt;</span>
-    <span class="nt">&lt;/servlet-container&gt;</span>
-    <span class="nt">&lt;handlers&gt;</span>
-        <span class="nt">&lt;file</span> <span class="na">name=</span><span class="s">&quot;welcome-content&quot;</span> <span class="na">path=</span><span class="s">&quot;${jboss.home.dir}/welcome-content&quot;</span><span class="nt">/&gt;</span>
-    <span class="nt">&lt;/handlers&gt;</span>
-    <span class="nt">&lt;filters&gt;</span>
-        <span class="nt">&lt;response-header</span> <span class="na">name=</span><span class="s">&quot;server-header&quot;</span> <span class="na">header-name=</span><span class="s">&quot;Server&quot;</span> <span class="na">header-value=</span><span class="s">&quot;WildFly/10&quot;</span><span class="nt">/&gt;</span>
-        <span class="nt">&lt;response-header</span> <span class="na">name=</span><span class="s">&quot;x-powered-by-header&quot;</span> <span class="na">header-name=</span><span class="s">&quot;X-Powered-By&quot;</span> <span class="na">header-value=</span><span class="s">&quot;Undertow/1&quot;</span><span class="nt">/&gt;</span>
-    <span class="nt">&lt;/filters&gt;</span>
-<span class="nt">&lt;/subsystem&gt;</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>Buffer cache</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre>    <span class="nt">&lt;buffer-cache</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span> <span class="na">buffer-size=</span><span class="s">&quot;1024&quot;</span> <span class="na">buffers-per-region=</span><span class="s">&quot;1024&quot;</span> <span class="na">max-regions=</span><span class="s">&quot;10&quot;</span><span class="nt">/&gt;</span>
-</pre></div></div></div>
-<ul>
-<li class="">
-The buffer cache is used to cache static resources for maximum performance
-</li>
-<li class="">
-Defaults to 10mb
-</li>
-<li class="">
-Multiple caches can be configured, so different deployments use different cache sizes
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Servlet Container</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="nt">&lt;servlet-container</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span> <span class="na">allow-non-standard-wrappers=</span><span class="s">&quot;false&quot;</span> <span class="na">default-session-timeout=</span><span class="s">&quot;30&quot;</span> <span class="nt">&gt;</span>
-    <span class="nt">&lt;jsp-config/&gt;</span>
-    <span class="nt">&lt;websockets/&gt;</span>
-<span class="nt">&lt;/servlet-container&gt;</span>
-</pre></div></div></div>
-<ul>
-<li class="">
-Provides all Servlet, JSP and Websocket related config, including session related config
-</li>
-<li class="">
-Most config can be overriden in web.xml
-</li>
-<li class="">
-JSP config is the same as EAP6
-</li>
-<li class="">
-It is possible to configure multiple Servlet containers, to allow multiple deployments to be deployed to the same context path on different virtual hosts
-</li>
-<li class="">
-Websockets can be disabled by removing the config
-</li>
-<li class="">
-<a href="http://wildscribe.github.io/Wildfly/9.0.0.CR2/subsystem/undertow/servlet-container/index.html">http://wildscribe.github.io/Wildfly/9.0.0.CR2/subsystem/undertow/servlet-container/index.html</a>
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Handlers and filters</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="nt">&lt;handlers&gt;</span>
-    <span class="nt">&lt;file</span> <span class="na">name=</span><span class="s">&quot;welcome-content&quot;</span> <span class="na">path=</span><span class="s">&quot;${jboss.home.dir}/welcome-content&quot;</span><span class="nt">/&gt;</span>
-<span class="nt">&lt;/handlers&gt;</span>
-<span class="nt">&lt;filters&gt;</span>
-    <span class="nt">&lt;response-header</span> <span class="na">name=</span><span class="s">&quot;server-header&quot;</span> <span class="na">header-name=</span><span class="s">&quot;Server&quot;</span> <span class="na">header-value=</span><span class="s">&quot;WildFly/10&quot;</span><span class="nt">/&gt;</span>
-    <span class="nt">&lt;response-header</span> <span class="na">name=</span><span class="s">&quot;x-powered-by-header&quot;</span> <span class="na">header-name=</span><span class="s">&quot;X-Powered-By&quot;</span> <span class="na">header-value=</span><span class="s">&quot;Undertow/1&quot;</span><span class="nt">/&gt;</span>
-    <span class="nt">&lt;expression-filter</span> <span class="na">name=</span><span class="s">&quot;myfilter&quot;</span> <span class="na">expression=</span><span class="s">&quot;method[POST] -&gt; header[name=my-header, value=my-value]&quot;</span> <span class="nt">/&gt;</span>
-<span class="nt">&lt;/filters&gt;</span>
-</pre></div></div></div>
-<ul>
-<li class="">
-File handlers serve static files, they must be attached to a location in a virtual host
-</li>
-<li class="">
-Filters modify some aspect of the request (although they are still just <code>HttpHandler</code> implementations)
-</li>
-<li class="">
-Common use cases are setting headers or GZIP compression
-</li>
-<li class="">
-Functionally equivalent to global valves
-</li>
-<li class="">
-Predicates can be used to control when they execute (more on this later)
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Server Config</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="nt">&lt;server</span> <span class="na">name=</span><span class="s">&quot;default-server&quot;</span><span class="nt">&gt;</span>
-    <span class="nt">&lt;http-listener</span> <span class="na">name=</span><span class="s">&quot;default&quot;</span> <span class="na">socket-binding=</span><span class="s">&quot;http&quot;</span> <span class="na">redirect-socket=</span><span class="s">&quot;https&quot;</span><span class="nt">/&gt;</span>
-    <span class="nt">&lt;host</span> <span class="na">name=</span><span class="s">&quot;default-host&quot;</span> <span class="na">alias=</span><span class="s">&quot;localhost&quot;</span><span class="nt">&gt;</span>
-        <span class="nt">&lt;location</span> <span class="na">name=</span><span class="s">&quot;/&quot;</span> <span class="na">handler=</span><span class="s">&quot;welcome-content&quot;</span><span class="nt">/&gt;</span>
-        <span class="nt">&lt;filter-ref</span> <span class="na">name=</span><span class="s">&quot;server-header&quot;</span><span class="nt">/&gt;</span>
-        <span class="nt">&lt;filter-ref</span> <span class="na">name=</span><span class="s">&quot;x-powered-by-header&quot;</span><span class="nt">/&gt;</span>
-    <span class="nt">&lt;/host&gt;</span>
-<span class="nt">&lt;/server&gt;</span>
-</pre></div></div></div>
-<ul>
-<li class="">
-Listeners are equivalent to EAP6 connectors, HTTP, HTTPS and AJP are supported
-</li>
-<li class="">
-HTTP/2 is provided by setting <code>enable-http2</code> on the HTTP or HTTPS listener
-</li>
-<li class="">
-The host element provides virtual host config
-</li>
-<li class="">
-Multiple servers can be configured which allow deployments and servers to be completely isolated, may be useful in muti-tenant environments
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Attributes, Predicates and Handlers</h2>
-<ul>
-<li class="">
-Undertow provides a built in DSL to configure handlers
-</li>
-<li class="">
-There are handlers that provide similar functionality to EAP6 valves
-</li>
-<li class="">
-DSL consists of attribute, predicates and handlers
-</li>
-<li class="">
-Attributes allow you to reference properties of the request or response
-</li>
-<li class="">
-Predicates allow you to make a decision based on the attributes of the request or response
-</li>
-<li class="">
-Handlers allow you to perform an action based on the request or response
-</li>
-<li class="">
-Undertow comes with a large number of built in handlers
-</li>
-<li class="">
-DSL is extensible
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Attributes</h2>
-<ul>
-<li class="">
-Used to specify the values that predicates act on
-</li>
-<li class="">
-Also used in some other places such as access log configuration
-</li>
-</ul>
-<div class="sect2">
-<h3 id="_examples">Examples</h3>
-<ul>
-<li class="">
-<code>%{i,Accept}</code> Incoming header
-</li>
-<li class="">
-<code>%{o,Content-Length}</code> Outgoing header
-</li>
-<li class="">
-<code>%u</code> Remote user that was authenticated
-</li>
-<li class="">
-<code>%U</code> Requested URL path
-</li>
-<li class="">
-And many more (see the docs)
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Predicates</h2>
-<ul>
-<li class="">
-Return true or false based on the value of an attribute
-</li>
-<li class="">
-Generally used to determine if a given handler should be run
-</li>
-</ul>
-<div class="sect2">
-<h3 id="_examples_2">Examples</h3>
-<ul>
-<li class="">
-<code>path</code> Matches an exact path
-</li>
-<li class="">
-<code>path-prefix</code> Matches the start of a path
-</li>
-<li class="">
-<code>path-suffix</code> Matches the end of a path
-</li>
-<li class="">
-<code>contains</code> Tests than an attribute contains a given string
-</li>
-<li class="">
-<code>exists</code> Tests that an attribute is not null
-</li>
-<li class="">
-<code>regex</code> Performs a regex match on an attribute
-</li>
-<li class="">
-<code>equals</code> Tests that two atrributes are equal
-</li>
-<li class="">
-<code>path-template</code> Path template match
-</li>
-<li class="">
-<code>method</code> Matches a specific HTTP method
-</li>
-<li class="">
-<code>auth-required</code> Matches authenticated requests
-</li>
-<li class="">
-<code>secure</code> Returns true if the request marked as secure (i.e. using SSL)
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Example predicates</h2>
-<p>The following predicates all match POST requests:</p>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="n">method</span><span class="o">[</span><span class="n">POST</span><span class="o">]</span>
-<span class="n">method</span><span class="o">[</span><span class="n">value</span><span class="o">=</span><span class="n">POST</span><span class="o">]</span>
-<span class="n">equals</span><span class="o">[{%{</span><span class="n">METHOD</span><span class="o">},</span> <span class="n">POST</span><span class="o">}]</span>
-<span class="n">equals</span><span class="o">[%</span><span class="n">m</span><span class="o">,</span> <span class="s">&quot;POST&quot;</span><span class="o">]</span>
-<span class="n">regex</span><span class="o">[</span><span class="n">pattern</span><span class="o">=</span><span class="s">&quot;POST&quot;</span><span class="o">,</span> <span class="n">value</span><span class="o">=</span><span class="s">&quot;%m&quot;</span><span class="o">,</span> <span class="n">full</span><span class="o">-</span><span class="n">match</span><span class="o">=</span><span class="kc">true</span><span class="o">]</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>Example predicates (cont)</h2>
-<p>Predicates can be combined</p>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="n">not</span> <span class="n">method</span><span class="o">[</span><span class="n">POST</span><span class="o">]</span>
-<span class="n">method</span><span class="o">[</span><span class="n">POST</span><span class="o">]</span> <span class="n">and</span> <span class="n">path</span><span class="o">-</span><span class="n">prefix</span><span class="o">[</span><span class="s">&quot;/uploads&quot;</span><span class="o">]</span>
-<span class="n">path</span><span class="o">-</span><span class="n">template</span><span class="o">[</span><span class="n">value</span><span class="o">=</span><span class="s">&quot;/user/{username}/*&quot;</span><span class="o">]</span> <span class="n">and</span> <span class="n">equals</span><span class="o">[%</span><span class="n">u</span><span class="o">,</span> <span class="n">$</span><span class="o">{</span><span class="n">username</span><span class="o">}]</span>
-<span class="n">regex</span><span class="o">[</span><span class="n">pattern</span><span class="o">=</span><span class="s">&quot;/user/(.*?)./.*&quot;</span><span class="o">,</span> <span class="n">value</span><span class="o">=%</span><span class="n">U</span><span class="o">,</span> <span class="n">full</span><span class="o">-</span><span class="n">match</span><span class="o">=</span><span class="kc">true</span><span class="o">]</span> <span class="n">and</span> <span class="n">equals</span><span class="o">[%</span><span class="n">u</span><span class="o">,</span> <span class="n">$</span><span class="o">{</span><span class="mi">1</span><span class="o">}]</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>Built in handlers</h2>
-<ul>
-<li class="">
-Handlers perform an action on the request
-</li>
-<li class="">
-The <code>set</code> handler is a general purpose handler that can be used to modify almost any aspect of an exchange
-</li>
-</ul>
-<div class="sect2">
-<h3 id="_examples_3">Examples</h3>
-<ul>
-<li class="">
-<code>rewrite</code> rewrites the request path
-</li>
-<li class="">
-<code>set</code> sets an attribute on the exchange
-</li>
-<li class="">
-<code>redirect</code> performs a redirect
-</li>
-<li class="">
-<code>allowed-methods</code> limits the allowed methods
-</li>
-<li class="">
-<code>disallowed-methods</code> limits the allowed methods
-</li>
-<li class="">
-<code>trace</code> Handles HTTP TRACE requests
-</li>
-<li class="">
-<code>dump-request</code> dumps requests to the log
-</li>
-<li class="">
-<code>response-rate-limit</code> limits the response speed
-</li>
-<li class="">
-<code>ip-access-control</code> provides IP based access control lists
-</li>
-<li class="">
-And more&#8230;
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Using handlers</h2>
-<ul>
-<li class="">
-Can be used in an <code>expression-filter</code> in the Undertow subsystem
-</li>
-<li class="">
-Can be used in <code>WEB-INF/undertow-handlers.conf</code>
-</li>
-<li class="">
-Most filters in the Undertow subsystem take an optional predicate that determines if the filter should run
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Predicated handlers (e.g. undertow-handlers.conf)</h2>
-<ul>
-<li class="">
-General form is <code>predicate -&gt; handler</code>, if no predicate is present handler is applied to every request.
-</li>
-<li class="">
-If multiples handlers are tied to one predicate they can be chained by enclosing them in curly braces
-</li>
-</ul>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="n">set</span><span class="o">[</span><span class="n">attribute</span><span class="o">=%{</span><span class="n">o</span><span class="o">,</span> <span class="n">Content</span><span class="o">-</span><span class="n">Type</span><span class="o">},</span> <span class="n">value</span><span class="o">=</span><span class="err">&#39;</span><span class="n">application</span><span class="o">/</span><span class="n">json</span><span class="err">&#39;</span><span class="o">]</span>
-<span class="n">path</span><span class="o">[</span><span class="err">&#39;</span><span class="o">/</span><span class="n">a</span><span class="err">&#39;</span><span class="o">]</span> <span class="o">-&gt;</span> <span class="n">redirect</span><span class="o">[</span><span class="err">&#39;</span><span class="o">/</span><span class="n">b</span><span class="err">&#39;</span><span class="o">]</span>
-<span class="n">path</span><span class="o">-</span><span class="n">prefix</span><span class="o">[</span><span class="err">&#39;</span><span class="o">/</span><span class="n">a</span><span class="err">&#39;</span><span class="o">]</span> <span class="o">-&gt;</span> <span class="n">redirect</span><span class="o">[</span><span class="err">&#39;</span><span class="o">/</span><span class="n">b$</span><span class="o">{</span><span class="n">remaining</span><span class="o">}</span><span class="err">&#39;</span><span class="o">]</span>
-<span class="n">regex</span><span class="o">[</span><span class="err">&#39;</span><span class="o">/</span><span class="n">a</span><span class="o">(.*)</span><span class="err">&#39;</span><span class="o">]</span> <span class="o">-&gt;</span> <span class="o">{</span> <span class="n">set</span><span class="o">[</span><span class="n">attribute</span><span class="o">=</span><span class="err">&#39;</span><span class="o">%{</span><span class="n">o</span><span class="o">,</span><span class="n">Location</span><span class="o">}</span><span class="err">&#39;</span><span class="o">,</span> <span class="n">value</span><span class="o">=</span><span class="err">&#39;</span><span class="o">/</span><span class="n">b$</span><span class="o">{</span><span class="mi">1</span><span class="o">}</span><span class="err">&#39;</span><span class="o">];</span> <span class="n">response</span><span class="o">-</span><span class="n">code</span><span class="o">[</span><span class="mi">302</span><span class="o">]</span> <span class="o">}</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>HTTP Upgrade</h2>
-<div class="sect2">
-<h3 id="_what_is_it">What is it</h3>
-<ul>
-<li class="">
-HTTP Upgrade allows for a HTTP connection to be upgraded to another protocol.
-</li>
-<li class="">
-Standard mechanism defined in the HTTP/1.1 RFC, most common use is to initiate a websocket connection
-</li>
-<li class="">
-A HTTP client sends a request with the <code>Upgrade:</code> header to initiate the connection.
-</li>
-<li class="">
-If the server accepts the upgrade it sends back a HTTP 101 response and hands off the socket to whatever handles the upgraded protocol
-</li>
-</ul>
-</div>
-<div class="sect2">
-<h3 id="_why_use_it">Why use it?</h3>
-<ul>
-<li class="">
-It allows you to multiplex multiple protocols over the HTTP port
-</li>
-<li class="">
-Makes firewall configuration simpler, and works around firewalls that block port other than 80 and 443
-</li>
-<li class="">
-Removes need to configure multiple ports
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Why is this important?</h2>
-<ul>
-<li class="">
-This allowed us to reduce the number of ports in the default EAP7 installation to 2
-</li>
-<li class="">
-EJB, JMS and JNDI are multiplexed over the undertow subsystem port 8080
-</li>
-<li class="">
-Management is multiplexed over the web management port 9990
-</li>
-<li class="">
-This is very important for cloud scenarios such as OpenShift, where a single physical host can handle hundreds of instances
-</li>
-<li class="">
-The only performance overhead is the initial HTTP request, otherwise it performs identically
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>HTTP Upgrade - Wildfly EJB example</h2>
-<div class="sect2">
-<h3 id="_client_request">Client Request</h3>
-<div class="listingblock">
-<div class="content">
-<pre><tt>GET / HTTP/1.1
-Host: example.com
-Upgrade: jboss-remoting
-Connection: Upgrade</tt></pre>
-</div></div>
-</div>
-<div class="sect2">
-<h3 id="_server_response">Server Response</h3>
-<div class="listingblock">
-<div class="content">
-<pre><tt>HTTP/1.1 101 Switching Protocols
-Upgrade: jboss-remoting
-Connection: Upgrade</tt></pre>
-</div></div>
-</div>
-</section>
-<section class="slide">
-<h2>Reverse Proxy</h2>
-<ul>
-<li class="">
-Undertow has the ability to act as a high performance reverse proxy
-</li>
-<li class="">
-Handles  AJP, HTTP and HTTP/2 backends
-</li>
-<li class="">
-Supports mod_cluster
-</li>
-<li class="">
-Configuration different for static proxy and mod_cluster based proxy
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Configuring the static reverse proxy</h2>
-<ul>
-<li class="">
-The proxy is configured with a static host list
-</li>
-<li class="">
-Can then be added to locations under a virtual host
-</li>
-<li class="">
-All requests to this location are forwarded
-</li>
-</ul>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="o">/</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">-</span><span class="n">group</span><span class="o">=</span><span class="n">standard</span><span class="o">-</span><span class="n">sockets</span><span class="o">/</span><span class="n">remote</span><span class="o">-</span><span class="n">destination</span><span class="o">-</span><span class="n">outbound</span><span class="o">-</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">=</span><span class="n">proxy</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">source</span><span class="o">-</span><span class="n">interface</span><span class="o">=</span><span class="kd">public</span><span class="o">,</span> <span class="n">host</span><span class="o">=</span><span class="n">localhost</span><span class="o">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">1111</span><span class="o">)</span>
-<span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">undertow</span><span class="o">/</span><span class="n">configuration</span><span class="o">=</span><span class="n">handler</span><span class="o">/</span><span class="n">reverse</span><span class="o">-</span><span class="n">proxy</span><span class="o">=</span><span class="n">myproxy</span><span class="o">:</span><span class="n">add</span><span class="o">()</span>
-<span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">undertow</span><span class="o">/</span><span class="n">configuration</span><span class="o">=</span><span class="n">handler</span><span class="o">/</span><span class="n">reverse</span><span class="o">-</span><span class="n">proxy</span><span class="o">=</span><span class="n">myproxy</span><span class="o">/</span><span class="n">host</span><span class="o">=</span><span class="n">http</span><span class="err">\</span><span class="o">:</span><span class="err">\</span><span class="o">/</span><span class="err">\</span><span class="o">/</span><span class="n">myhost</span><span class="err">\</span><span class="o">:</span><span class="mi">8080</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">outbound</span><span class="o">-</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">=</span><span class="n">proxy</span><span class="o">)</span>
-<span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">undertow</span><span class="o">/</span><span class="n">server</span><span class="o">=</span><span class="k">default</span><span class="o">-</span><span class="n">server</span><span class="o">/</span><span class="n">host</span><span class="o">=</span><span class="k">default</span><span class="o">-</span><span class="n">host</span><span class="o">/</span><span class="n">location</span><span class="o">=</span><span class="err">\</span><span class="o">/</span><span class="n">context</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">handler</span><span class="o">=</span><span class="n">myproxy</span><span class="o">)</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>mod_cluster support</h2>
-<ul>
-<li class="">
-The mod_cluster implementation is based on the C version, ported to Java and modified to be based on Undertow
-</li>
-<li class="">
-Functionality and operation should be basically similar
-</li>
-<li class="">
-The management page no longer exists, instead it is monitored and managed via the management API (e.g. CLI)
-</li>
-</ul>
-<div class="sect2">
-<h3 id="_configuring_a_mod_cluster_reverse_proxy">Configuring a mod_cluster reverse proxy</h3>
-<ul>
-<li class="">
-The mod_cluster proxy handler acts as a filter
-</li>
-<li class="">
-It will only act if it has a node registered that can handle the requests context and host
-</li>
-<li class="">
-Otherwise the request will be passed to the local server to be handled
-</li>
-</ul>
-</div>
-<div class="sect2">
-<h3 id="_online_resources">Online resources</h3>
-<ul>
-<li class="">
-<a href="http://blog.eisele.net/2015/01/developer-interview-di-11-stuart-douglas-about-wildfly9-undertow.html">http://blog.eisele.net/2015/01/developer-interview-di-11-stuart-douglas-about-wildfly9-undertow.html</a>
-</li>
-<li class="">
-<a href="https://github.com/stuartwdouglas/modcluster-example">https://github.com/stuartwdouglas/modcluster-example</a>
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Configuring a mod_cluster reverse proxy</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="o">/</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">-</span><span class="n">group</span><span class="o">=</span><span class="n">standard</span><span class="o">-</span><span class="n">sockets</span><span class="o">/</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">=</span><span class="n">modcluster</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">port</span><span class="o">=</span><span class="mi">23364</span><span class="o">,</span> <span class="n">multicast</span><span class="o">-</span><span class="n">address</span><span class="o">=</span><span class="mf">224.0</span><span class="o">.</span><span class="mf">1.105</span><span class="o">)</span>
-<span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">undertow</span><span class="o">/</span><span class="n">configuration</span><span class="o">=</span><span class="n">filter</span><span class="o">/</span><span class="n">mod</span><span class="o">-</span><span class="n">cluster</span><span class="o">=</span><span class="n">modcluster</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">management</span><span class="o">-</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">=</span><span class="n">http</span><span class="o">,</span> <span class="n">advertise</span><span class="o">-</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">=</span><span class="n">modcluster</span><span class="o">)</span>
-<span class="o">/</span><span class="n">subsystem</span><span class="o">=</span><span class="n">undertow</span><span class="o">/</span><span class="n">server</span><span class="o">=</span><span class="k">default</span><span class="o">-</span><span class="n">server</span><span class="o">/</span><span class="n">host</span><span class="o">=</span><span class="k">default</span><span class="o">-</span><span class="n">host</span><span class="o">/</span><span class="n">filter</span><span class="o">-</span><span class="n">ref</span><span class="o">=</span><span class="n">modcluster</span><span class="o">:</span><span class="n">add</span>
-</pre></div></div></div>
-<div class="sect2">
-<h3 id="_runtime_monitoring_and_management">Runtime monitoring and Management</h3>
-<ul>
-<li class="">
-Runtime resources (nodes, contexts etc) can be managed under the mod-cluster resource
-</li>
-<li class="">
-This includes all management operations that would have previously been done under the mod_cluster management page
-</li>
-<li class="">
-<a href="http://wildscribe.github.io/Wildfly/9.0.0.CR2/subsystem/undertow/configuration/filter/mod-cluster/index.html">http://wildscribe.github.io/Wildfly/9.0.0.CR2/subsystem/undertow/configuration/filter/mod-cluster/index.html</a>
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Servlet 3.1</h2>
-<ul>
-<li class="">
-Undertow provides a fully compliant Servlet 3.1 container
-</li>
-</ul>
-<div class="sect2">
-<h3 id="_notable_changes">Notable Changes</h3>
-<ul>
-<li class="">
-Async IO Support
-</li>
-<li class="">
-HTTP Upgrade Support
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Async IO</h2>
-<ul>
-<li class="">
-Servlet 3.1 now provides support for non-blocking IO
-</li>
-</ul>
-<div class="sect2">
-<h3 id="_traditional_io">Traditional IO</h3>
-<ul>
-<li class="">
-Uses a thread per connection model
-</li>
-<li class="">
-Reads and writes are blocking, the operation will not return until the operation is complete
-</li>
-<li class="">
-A large number of connection directly translates to a large number of threads
-</li>
-</ul>
-</div>
-<div class="sect2">
-<h3 id="_non_blocking_io">Non-blocking IO</h3>
-<ul>
-<li class="">
-Read and write operation are non-blocking, instead a callback mechanism is used to let you know when the operation is complete
-</li>
-<li class="">
-A single thread can handle a large number of connections
-</li>
-<li class="">
-Programmers must be careful not to perform blocking operations within the IO thread
-</li>
-<li class="">
-Non-blocking code is generally more complex to write than blocking code
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Servlet 3.1 Async IO</h2>
-<div class="sect2">
-<h3 id="_performing_an_async_write">Performing an async write</h3>
-<ul>
-<li class="">
-Call <code>ServletRequest.startAsync()</code> to put the request into async mode
-</li>
-<li class="">
-Call <code>ServletOutputStream.setWriteListener(WriteListener writeListener)</code> to put the stream into async mode
-</li>
-<li class="">
-The write listener will be invoked after the current request has returned to the container
-</li>
-<li class="">
-You <strong>must</strong> call <code>ServletOutputStream.isReady()</code> before calling <code>write()</code>
-</li>
-<li class="">
-When <code>isReady()</code> returns true you can call <code>write()</code>
-</li>
-<li class="">
-If the socket cannot write out all the data it will be queued, <code>write()</code> will always return immediately
-</li>
-<li class="">
-When <code>isReady()</code> return false then you cannot write, you must return and the write listener will be invoked again
- once the stream is ready to write.
-</li>
-</ul>
-</div>
-</section>
-<section class="slide">
-<h2>Performing an async write (cont)</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="kd">protected</span> <span class="kt">void</span> <span class="nf">doGet</span><span class="o">(</span><span class="kd">final</span> <span class="n">HttpServletRequest</span> <span class="n">req</span><span class="o">,</span> <span class="kd">final</span> <span class="n">HttpServletResponse</span> <span class="n">resp</span><span class="o">)</span> <span class="kd">throws</span> <span class="n">ServletException</span><span class="o">,</span> <span class="n">IOException</span> <span class="o">{</span>
-    <span class="kd">final</span> <span class="n">AsyncContext</span> <span class="n">context</span> <span class="o">=</span> <span class="n">req</span><span class="o">.</span><span class="na">startAsync</span><span class="o">();</span>
-    <span class="kd">final</span> <span class="n">ServletOutputStream</span> <span class="n">outputStream</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="na">getOutputStream</span><span class="o">();</span>
-    <span class="kd">final</span> <span class="n">String</span><span class="o">[]</span> <span class="n">messages</span> <span class="o">=</span> <span class="o">{</span><span class="s">&quot;Hello &quot;</span><span class="o">,</span> <span class="s">&quot;async &quot;</span><span class="o">,</span> <span class="s">&quot;world&quot;</span><span class="o">};</span>
-    <span class="n">outputStream</span><span class="o">.</span><span class="na">setWriteListener</span><span class="o">(</span><span class="k">new</span> <span class="n">WriteListener</span><span class="o">()</span> <span class="o">{</span>
-        <span class="kt">int</span> <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span><span class="o">;</span>
-        <span class="nd">@Override</span>
-        <span class="kd">public</span> <span class="kd">synchronized</span> <span class="kt">void</span> <span class="nf">onWritePossible</span><span class="o">()</span> <span class="kd">throws</span> <span class="n">IOException</span> <span class="o">{</span>
-            <span class="k">while</span> <span class="o">(</span><span class="n">outputStream</span><span class="o">.</span><span class="na">isReady</span><span class="o">()</span> <span class="o">&amp;&amp;</span> <span class="n">pos</span> <span class="o">&lt;</span> <span class="n">messages</span><span class="o">.</span><span class="na">length</span><span class="o">())</span> <span class="o">{</span>
-                <span class="n">outputStream</span><span class="o">.</span><span class="na">write</span><span class="o">(</span><span class="n">messages</span><span class="o">[</span><span class="n">pos</span><span class="o">++].</span><span class="na">getBytes</span><span class="o">());</span>
-            <span class="o">}</span>
-            <span class="k">if</span> <span class="o">(</span><span class="n">pos</span> <span class="o">==</span> <span class="n">messages</span><span class="o">.</span><span class="na">length</span><span class="o">())</span> <span class="n">context</span><span class="o">.</span><span class="na">complete</span><span class="o">();</span>
-        <span class="o">}</span>
-    <span class="o">});</span>
-<span class="o">}</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>The Servlet Upgrade API</h2>
-<ul>
-<li class="">
-To upgrade the request we call <code>&lt;T extends HttpUpgradeHandler&gt; T HttpServletRequest.upgrade(Class&lt;T&gt; handlerClass)</code>
-</li>
-<li class="">
-We are still responsible for checking for the <code>Upgrade</code> header, and setting and appropriate response headers
-</li>
-<li class="">
-Once the request is finished the resulting <code>HttpUpgradeHandler</code> will take over the connection, and can send and receive
-  data via the provided <code>WebConnection</code> and its associated streams.
-</li>
-<li class="">
-Upgraded connection can use the async IO capabilities of <code>ServletInputStream</code> and <code>ServletOutputStream</code>
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>The Servlet Upgrade API (cont)</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="kd">public</span> <span class="kd">class</span> <span class="nc">MyProtocolUpgradeFilter</span> <span class="kd">implements</span> <span class="n">Filter</span> <span class="o">{</span>
-
-    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">doFilter</span><span class="o">(</span><span class="n">ServletRequest</span> <span class="n">request</span><span class="o">,</span> <span class="n">ServletResponse</span> <span class="n">response</span><span class="o">,</span> <span class="n">FilterChain</span> <span class="n">chain</span><span class="o">)</span> <span class="kd">throws</span> <span class="n">IOException</span><span class="o">,</span> <span class="n">ServletException</span> <span class="o">{</span>
-
-        <span class="n">HttpServletRequest</span> <span class="n">req</span> <span class="o">=</span> <span class="o">(</span><span class="n">HttpServletRequest</span><span class="o">)</span> <span class="n">request</span><span class="o">;</span>
-        <span class="k">if</span><span class="o">(</span><span class="s">&quot;my-protocol&quot;</span><span class="o">.</span><span class="na">equals</span><span class="o">(</span><span class="n">req</span><span class="o">.</span><span class="na">getHeader</span><span class="o">(</span><span class="s">&quot;Upgrade&quot;</span><span class="o">)))</span> <span class="o">{</span>
-            <span class="n">HttpServletResponse</span> <span class="n">resp</span> <span class="o">=</span> <span class="o">(</span><span class="n">HttpServletResponse</span><span class="o">)</span> <span class="n">response</span><span class="o">;</span>
-            <span class="n">resp</span><span class="o">.</span><span class="na">setHeader</span><span class="o">(</span><span class="s">&quot;Upgrade&quot;</span><span class="o">,</span> <span class="s">&quot;my-protocol&quot;</span><span class="o">);</span>
-            <span class="n">req</span><span class="o">.</span><span class="na">upgrade</span><span class="o">(</span><span class="n">MyProtocolHandler</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
-            <span class="k">return</span><span class="o">;</span>
-        <span class="o">}</span>
-        <span class="n">chain</span><span class="o">.</span><span class="na">doFilter</span><span class="o">(</span><span class="n">request</span><span class="o">,</span> <span class="n">response</span><span class="o">);</span>
-    <span class="o">}</span>
+  <span class="nd">@ResourceAdapter</span><span class="o">(</span><span class="s">&quot;remote-artemis&quot;</span><span class="o">)</span>
+ <span class="nd">@MessageDriven</span><span class="o">(</span><span class="n">name</span> <span class="o">=</span> <span class="s">&quot;MyMDB&quot;</span><span class="o">,</span> <span class="n">activationConfig</span> <span class="o">=</span> <span class="o">{</span>
     <span class="o">...</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>The Servlet Upgrade API Continued</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="kd">public</span> <span class="kd">interface</span> <span class="nc">HttpUpgradeHandler</span> <span class="o">{</span>
-
-    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">init</span><span class="o">(</span><span class="n">WebConnection</span> <span class="n">wc</span><span class="o">);</span>
-
-    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">destroy</span><span class="o">();</span>
-<span class="o">}</span>
-
-<span class="kd">public</span> <span class="kd">interface</span> <span class="nc">WebConnection</span> <span class="kd">extends</span> <span class="n">AutoCloseable</span> <span class="o">{</span>
-
-    <span class="kd">public</span> <span class="n">ServletInputStream</span> <span class="nf">getInputStream</span><span class="o">()</span> <span class="kd">throws</span> <span class="n">IOException</span><span class="o">;</span>
-
-    <span class="kd">public</span> <span class="n">ServletOutputStream</span> <span class="nf">getOutputStream</span><span class="o">()</span> <span class="kd">throws</span> <span class="n">IOException</span><span class="o">;</span>
-<span class="o">}</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>Servlet Extensions</h2>
-<ul>
-<li class="">
-Undertow provides the ability to customise a deployment via the <code>io.undertow.servlet.ServletExtension</code> interface
-</li>
-<li class="">
-Similar to a <code>ServletContainerInitializer</code> but more flexible, as any part of the deployment can be changed
-</li>
-<li class="">
-Allows you to use native Undertow handlers in a servlet deployment, without incurring any servlet overhead
-</li>
-<li class="">
-Gives you access to the <code>DeploymentInfo</code> structure, so you have access to the same API that Wildfly used to build the deployment
-</li>
-</ul>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="kd">public</span> <span class="kd">interface</span> <span class="nc">ServletExtension</span> <span class="o">{</span>
-    <span class="kt">void</span> <span class="nf">handleDeployment</span><span class="o">(</span><span class="kd">final</span> <span class="n">DeploymentInfo</span> <span class="n">d</span><span class="o">,</span> <span class="kd">final</span> <span class="n">ServletContextImpl</span> <span class="n">s</span><span class="o">);</span>
-<span class="o">}</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>Example Extension</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="kd">public</span> <span class="kt">void</span> <span class="nf">handleDeployment</span><span class="o">(</span><span class="kd">final</span> <span class="n">DeploymentInfo</span> <span class="n">d</span><span class="o">,</span> <span class="kd">final</span> <span class="n">ServletContextImpl</span> <span class="n">s</span><span class="o">)</span> <span class="o">{</span>
-    <span class="n">d</span><span class="o">.</span><span class="na">addInitialHandlerChainWrapper</span><span class="o">(</span><span class="k">new</span> <span class="n">HandlerWrapper</span><span class="o">()</span> <span class="o">{</span>
-        <span class="kd">public</span> <span class="n">HttpHandler</span> <span class="nf">wrap</span><span class="o">(</span><span class="kd">final</span> <span class="n">HttpHandler</span> <span class="n">servletHandler</span><span class="o">)</span> <span class="o">{</span>
-            <span class="kd">final</span> <span class="n">ResourceHandler</span> <span class="n">r</span> <span class="o">=</span> <span class="n">Handlers</span><span class="o">.</span><span class="na">resource</span><span class="o">(</span><span class="n">d</span><span class="o">.</span><span class="na">getResourceManager</span><span class="o">());</span>
-            <span class="k">return</span> <span class="n">Handlers</span><span class="o">.</span><span class="na">predicate</span><span class="o">(</span>
-                <span class="n">Predicates</span><span class="o">.</span><span class="na">suffixs</span><span class="o">(</span><span class="s">&quot;.css&quot;</span><span class="o">,</span> <span class="s">&quot;.js&quot;</span><span class="o">),</span> <span class="n">r</span><span class="o">,</span> <span class="n">servletHandler</span><span class="o">);</span>
-        <span class="o">}</span>
-    <span class="o">});</span>
-<span class="o">}</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>Undertow.js</h2>
-<ul>
-<li class="">
-Undertow.js allows you to use JavaScript to write HTTP and REST endpoints
-</li>
-<li class="">
-Allows you to inject Java EE resources into your JavaScript handlers
-</li>
-<li class="">
-Provides JavaScript wrappers for some Java EE objects (such as datasources)
-</li>
-<li class="">
-Supports pluggable template engines
-</li>
-<li class="">
-Supports declarative security
-</li>
-<li class="">
-Supports websockets
-</li>
-<li class="">
-Will be tech preview for EE7
-</li>
-<li class="">
-For full details see <a href="http://wildfly.org/news/2015/08/10/Javascript-Support-In-Wildfly/">http://wildfly.org/news/2015/08/10/Javascript-Support-In-Wildfly/</a>
-</li>
-<li class="">
-Also covered in the Undertow docs
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Template Example</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="nx">$undertow</span>
-    <span class="p">.</span><span class="nx">onGet</span><span class="p">(</span><span class="s2">&quot;/hello&quot;</span><span class="p">,</span>
-        <span class="p">{</span><span class="nx">template</span><span class="o">:</span> <span class="s1">&#39;hello.txt&#39;</span><span class="p">,</span> <span class="nx">headers</span><span class="o">:</span> <span class="p">{</span><span class="s2">&quot;content-type&quot;</span><span class="o">:</span> <span class="s2">&quot;text/plain&quot;</span><span class="p">}},</span>
-        <span class="p">[</span><span class="kd">function</span> <span class="p">(</span><span class="nx">$exchange</span><span class="p">)</span> <span class="p">{</span>
-            <span class="k">return</span> <span class="p">{</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;Stuart&#39;</span><span class="p">};</span>
-        <span class="p">}]);</span>
-</pre></div></div></div>
-<p>(hello.txt is a mustache template file)</p>
-</section>
-<section class="slide">
-<h2>JSON Example</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="nx">$undertow</span>
-    <span class="p">.</span><span class="nx">alias</span><span class="p">(</span><span class="s1">&#39;db&#39;</span><span class="p">,</span> <span class="s1">&#39;jndi:java:jboss/datasources/ExampleDS&#39;</span><span class="p">)</span>
-    <span class="p">.</span><span class="nx">onGet</span><span class="p">(</span><span class="s2">&quot;/rest/members&quot;</span><span class="p">,</span>
-        <span class="p">{</span><span class="nx">transactional</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span> <span class="p">{</span><span class="nx">roles_allowed</span><span class="o">:</span> <span class="p">[</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;user&quot;</span><span class="p">]},</span> <span class="nx">headers</span><span class="o">:</span> <span class="p">{</span><span class="s2">&quot;content-type&quot;</span><span class="o">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">}},</span>
-        <span class="p">[</span><span class="s1">&#39;db&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">$exchange</span><span class="p">,</span> <span class="nx">db</span><span class="p">)</span> <span class="p">{</span>
-            <span class="k">return</span> <span class="nx">db</span><span class="p">.</span><span class="nx">select</span><span class="p">(</span><span class="s2">&quot;select * from members&quot;</span><span class="p">);</span>
-        <span class="p">}]);</span>
-</pre></div></div></div>
-</section>
-<section class="slide">
-<h2>HTTP/2</h2>
-<ul>
-<li class="">
-Will be tech preview in EAP7
-</li>
-<li class="">
-Java 8 has no supported way of doing ALPN version negotiation that is required for HTTP/2
-</li>
-<li class="">
-Requires an ALPN jar on the boot class path, specific to the version of the JVM in use
-</li>
-<li class="">
-ALPN is planned for Java 9
-</li>
-<li class="">
-Plans for OpenSSL bindings for EAP 7.1
-</li>
-<li class="">
-h2c (non-SSL HTTP/2) can still be used, but it is not supported by major browsers, the main use case from an EAP7 point of view is as a replacement for AJP
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Wildfly websocket support</h2>
-<ul>
-<li class="">
-Wildfly supports websockets using Undertow&#8217;s websocket implementation
-</li>
-<li class="">
-Provides support for the standard Java Web Socket API (JSR-356, a required part of EE7)
-</li>
-<li class="">
-Because of this frameworks such as Atmosphere that use JSR-356 work out of the box
-</li>
-<li class="">
-Undertow supports version 1.1 of JSR-356, and websockets are enabled by default
-</li>
-</ul>
-</section>
-<section class="slide">
-<h2>Annotated Server Endpoint Example</h2>
-<div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="nd">@ServerEndpoint</span><span class="o">(</span><span class="s">&quot;/websocket/{name}&quot;</span><span class="o">)</span> <span class="c1">//note the URL template.</span>
-<span class="kd">public</span> <span class="kd">class</span> <span class="nc">HelloEndpoint</span> <span class="o">{</span>
-
-    <span class="nd">@OnOpen</span> <span class="c1">//invoked when the client first connects</span>
-    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">onOpen</span><span class="o">(</span><span class="kd">final</span> <span class="n">Session</span> <span class="n">session</span><span class="o">)</span> <span class="o">{</span>
-        <span class="n">session</span><span class="o">.</span><span class="na">getAsyncRemote</span><span class="o">().</span><span class="na">sendText</span><span class="o">(</span><span class="s">&quot;hi&quot;</span><span class="o">);</span>
-    <span class="o">}</span>
-
-    <span class="nd">@OnMessage</span> <span class="c1">//handles text messages</span>
-    <span class="kd">public</span> <span class="n">String</span> <span class="nf">message</span><span class="o">(</span><span class="n">String</span> <span class="n">message</span><span class="o">,</span> <span class="nd">@PathParam</span><span class="o">(</span><span class="s">&quot;name&quot;</span><span class="o">)</span> <span class="n">String</span> <span class="n">name</span><span class="o">)</span> <span class="o">{</span>
-        <span class="k">return</span> <span class="s">&quot;Hello &quot;</span> <span class="o">+</span> <span class="n">name</span> <span class="o">+</span> <span class="s">&quot; you sent&quot;</span> <span class="o">+</span> <span class="n">message</span><span class="o">;</span>
+<span class="o">})</span> 
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">MyMDB</span> <span class="kd">implements</span> <span class="n">MessageListener</span> <span class="o">{</span>
+      <span class="kd">public</span> <span class="kt">void</span> <span class="nf">onMessage</span><span class="o">(</span><span class="n">Message</span> <span class="n">message</span><span class="o">)</span> <span class="o">{</span>
+       <span class="o">...</span>
     <span class="o">}</span>
 <span class="o">}</span>
 </pre></div></div></div>
 </section>
 <section class="slide">
-<h2>Another Annotated Server Endpoint Example</h2>
+<h2>Remote JBoss A-MQ 7 Provider [3/4]</h2>
+<ul>
+<li class="">
+Outbound Connection Factory
+</li>
+</ul>
 <div class="listingblock">
-<div class="content"><div class="highlight"><pre><span class="nd">@ServerEndpoint</span><span class="o">(</span><span class="s">&quot;/websocket/{name}&quot;</span><span class="o">)</span> <span class="c1">//note the URL template.</span>
-<span class="kd">public</span> <span class="kd">class</span> <span class="nc">HelloEndpoint</span> <span class="o">{</span>
-
-    <span class="nd">@OnMessage</span> <span class="c1">//handles binary messages</span>
-    <span class="kd">public</span> <span class="kt">byte</span><span class="o">[]</span> <span class="nf">binaryMessage</span><span class="o">(</span><span class="kt">byte</span><span class="o">[]</span> <span class="n">binaryMessage</span><span class="o">)</span> <span class="o">{</span>
-        <span class="k">return</span> <span class="n">binaryMessage</span><span class="o">;</span> <span class="c1">//echo binary data</span>
-    <span class="o">}</span>
-
-    <span class="nd">@OnClose</span> <span class="c1">//invoked when the connection is closed</span>
-    <span class="kd">public</span> <span class="kt">void</span> <span class="nf">onClose</span><span class="o">(</span><span class="kd">final</span> <span class="n">Session</span> <span class="n">session</span><span class="o">)</span> <span class="o">{</span>
-        <span class="n">System</span><span class="o">.</span><span class="na">out</span><span class="o">.</span><span class="na">println</span><span class="o">(</span><span class="s">&quot;Connection closed&quot;</span><span class="o">);</span>
-    <span class="o">}</span>
+<div class="content"><div class="highlight"><pre><span class="nd">@Inject</span>
+ <span class="nd">@JMSConnectionFactory</span><span class="o">(</span><span class="s">&quot;java:/jms/remoteCF&quot;</span><span class="o">)</span>
+ <span class="kd">private</span> <span class="n">JMSContext</span> <span class="n">context</span><span class="o">;</span>
+</pre></div></div></div>
+</section>
+<section class="slide">
+<h2>Remote JBoss A-MQ 7 Provider [4/4]</h2>
+<ul>
+<li class="">
+disable JNDI lookup (on local EAP7 server)
+</li>
+</ul>
+<div class="listingblock">
+<div class="content"><div class="highlight"><pre><span class="nd">@ResourceAdapter</span><span class="o">(</span><span class="s">&quot;remote-artemis&quot;</span><span class="o">)</span>
+<span class="nd">@MessageDriven</span><span class="o">(</span><span class="n">name</span> <span class="o">=</span> <span class="s">&quot;MyMDB&quot;</span><span class="o">,</span> <span class="n">activationConfig</span> <span class="o">=</span> <span class="o">{</span>
+     <span class="nd">@ActivationConfigProperty</span><span class="o">(</span><span class="n">propertyName</span> <span class="o">=</span> <span class="s">&quot;useJNDI&quot;</span><span class="o">,</span>         <span class="n">propertyValue</span> <span class="o">=</span> <span class="s">&quot;false&quot;</span><span class="o">),</span>
+     <span class="nd">@ActivationConfigProperty</span><span class="o">(</span><span class="n">propertyName</span> <span class="o">=</span> <span class="s">&quot;destination&quot;</span><span class="o">,</span>     <span class="n">propertyValue</span> <span class="o">=</span> <span class="s">&quot;myQueue&quot;</span><span class="o">),</span>
+     <span class="nd">@ActivationConfigProperty</span><span class="o">(</span><span class="n">propertyName</span> <span class="o">=</span> <span class="s">&quot;destinationType&quot;</span><span class="o">,</span> <span class="n">propertyValue</span> <span class="o">=</span> <span class="s">&quot;javax.jms.Queue&quot;</span><span class="o">),</span> 
+    <span class="nd">@ActivationConfigProperty</span><span class="o">(</span><span class="n">propertyName</span> <span class="o">=</span> <span class="s">&quot;acknowledgeMode&quot;</span><span class="o">,</span> <span class="n">propertyValue</span> <span class="o">=</span> <span class="s">&quot;Auto-acknowledge&quot;</span><span class="o">)</span>
+<span class="o">})</span>
+<span class="kd">public</span> <span class="kd">class</span> <span class="nc">MyMDB</span> <span class="kd">implements</span> <span class="n">MessageListener</span> <span class="o">{</span>
+      <span class="o">...</span>
 <span class="o">}</span>
 </pre></div></div></div>
 </section>
@@ -4327,10 +3611,16 @@ Undertow supports version 1.1 of JSR-356, and websockets are enabled by default
 <h2>Links</h2>
 <ul>
 <li class="">
-<a href="http://wildscribe.github.io/">http://wildscribe.github.io/</a>
+<a href="http://wildfly.org">http://wildfly.org</a>
 </li>
 <li class="">
-<a href="http://undertow.io">http://undertow.io</a>
+<a href="http://activemq.apache.org/artemis/">http://activemq.apache.org/artemis/</a>
+</li>
+<li class="">
+<a href="https://docs.jboss.org/author/display/WFLY10/Messaging+configuration">https://docs.jboss.org/author/display/WFLY10/Messaging+configuration</a>
+</li>
+<li class="">
+<a href="http://wildscribe.github.io">http://wildscribe.github.io</a> (WFLY 10 is not published yet)
 </li>
 </ul>
 </section>
