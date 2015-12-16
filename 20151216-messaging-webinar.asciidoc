@@ -622,7 +622,25 @@ public class MyMDB implements MessageListener {
 <1> standard portable property to lookup the connection factory
 <2> standard portable property to lookup the destination
 
-== Remote JBoss A-MQ 7 Server [1/4]
+== Remote JBoss A-MQ 7 Server [1/5]
+
+----
+  +------------------------------+            +------------------+
+  |        WildFly/EAP7          |            |   A-MQ7 Server   |
+  | +--------------------------+ |           +------+            |
+  | |pooled-connection-factory +-------o )---| Core |\ +-------+ |
+  | | o o o o o o              | |   :61616  +------+ \|myQueue| |
+  | +----+---------------------+ |           +------+ /+-------+ |
+  |      |                       |   +-> )---| AMQP |/           |
+  | +----+--+                    |   |       +----- +            |
+  | | MyMDB |                    |   |        +------------------+
+  | +-------+                    |   |
+  +------------------------------+   |        +-------------+
+                                     +--------| AMQP client |
+                                              +-------------+
+----
+
+== Remote JBoss A-MQ 7 Server [2/5]
 
 [source,java]
 ----
@@ -634,7 +652,7 @@ public class MyMDB implements MessageListener {
 ----
 <1> Artemis multi-protocol port (including Core protocol)
 
-== Remote JBoss A-MQ 7 Server [2/4]
+== Remote JBoss A-MQ 7 Server [3/5]
 
 * MDB Inbound Configuration
 
@@ -653,7 +671,7 @@ public class MyMDB implements MessageListener {
 }
 ----
 
-== Remote JBoss A-MQ 7 Server [3/4]
+== Remote JBoss A-MQ 7 Server [4/5]
 
 * Outbound Connection Factory
 
@@ -664,7 +682,7 @@ public class MyMDB implements MessageListener {
  private JMSContext context;
 ----
 
-== Remote JBoss A-MQ 7 Server [4/4]
+== Remote JBoss A-MQ 7 Server [5/5]
 
 * disable JNDI lookup (on local EAP7 server)
 

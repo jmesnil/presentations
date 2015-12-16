@@ -3043,7 +3043,7 @@ EAP7&#8217;s <code>messaging-activemq</code> subsystem also provides a <code>jms
 </pre></div></div></div>
 </section>
 <section class="slide">
-<h2>Remote JBoss A-MQ 7 Provider</h2>
+<h2>Remote JBoss A-MQ 7 Server</h2>
 <ul>
 <li class="">
 JBoss A-MQ 7.x (Artemis)
@@ -3540,7 +3540,26 @@ standard portable property to lookup the destination
 </ol></div>
 </section>
 <section class="slide">
-<h2>Remote JBoss A-MQ 7 Provider [1/4]</h2>
+<h2>Remote JBoss A-MQ 7 Server [1/5]</h2>
+<div class="listingblock">
+<div class="content">
+<pre><tt>  +------------------------------+            +------------------+
+  |        WildFly/EAP7          |            |   A-MQ7 Server   |
+  | +--------------------------+ |           +------+            |
+  | |pooled-connection-factory +-------o )---| Core |\ +-------+ |
+  | | o o o o o o              | |   :61616  +------+ \|myQueue| |
+  | +----+---------------------+ |           +------+ /+-------+ |
+  |      |                       |   +-&gt; )---| AMQP |/           |
+  | +----+--+                    |   |       +----- +            |
+  | | MyMDB |                    |   |        +------------------+
+  | +-------+                    |   |
+  +------------------------------+   |        +-------------+
+                                     +--------| AMQP client |
+                                              +-------------+</tt></pre>
+</div></div>
+</section>
+<section class="slide">
+<h2>Remote JBoss A-MQ 7 Server [2/5]</h2>
 <div class="listingblock">
 <div class="content"><div class="highlight"><pre><span class="o">/</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">-</span><span class="n">group</span><span class="o">=</span><span class="n">standard</span><span class="o">-</span><span class="n">sockets</span><span class="o">/</span><span class="n">remote</span><span class="o">-</span><span class="n">destination</span><span class="o">-</span><span class="n">outbound</span><span class="o">-</span><span class="n">socket</span><span class="o">-</span><span class="n">binding</span><span class="o">=</span><span class="n">remote</span><span class="o">-</span><span class="n">artemis</span><span class="o">:</span><span class="n">add</span><span class="o">(</span><span class="n">host</span><span class="o">=&lt;</span><span class="n">server</span> <span class="n">host</span><span class="o">&gt;,</span> <span class="n">port</span><span class="o">=</span><span class="mi">61616</span><span class="o">)</span> <span class="c1">//<b>&lt;1&gt;</b></span>
 
@@ -3557,7 +3576,7 @@ Artemis multi-protocol port (including Core protocol)
 </ol></div>
 </section>
 <section class="slide">
-<h2>Remote JBoss A-MQ 7 Provider [2/4]</h2>
+<h2>Remote JBoss A-MQ 7 Server [3/5]</h2>
 <ul>
 <li class="">
 MDB Inbound Configuration
@@ -3578,7 +3597,7 @@ MDB Inbound Configuration
 </pre></div></div></div>
 </section>
 <section class="slide">
-<h2>Remote JBoss A-MQ 7 Provider [3/4]</h2>
+<h2>Remote JBoss A-MQ 7 Server [4/5]</h2>
 <ul>
 <li class="">
 Outbound Connection Factory
@@ -3591,7 +3610,7 @@ Outbound Connection Factory
 </pre></div></div></div>
 </section>
 <section class="slide">
-<h2>Remote JBoss A-MQ 7 Provider [4/4]</h2>
+<h2>Remote JBoss A-MQ 7 Server [5/5]</h2>
 <ul>
 <li class="">
 disable JNDI lookup (on local EAP7 server)
