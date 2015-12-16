@@ -112,6 +112,7 @@ Messaging With ActiveMQ Artemis
 
 * New subsystem for WildFly 10 / EAP7
 * Powered by ActiveMQ Artemis
+* Supports only Artemis Core protocol
 * legacy +messaging+ subsystem
   - not runnable anymore
   - management model (+admin-only+ mode)
@@ -356,7 +357,7 @@ old: /subsystem=messaging/jms-bridge=XXX
 new: /subsystem=messaging-activemq/jms-bridge=YYY
 ----
 
-== Remote JBoss A-MQ 7 Provider
+== Remote JBoss A-MQ 7 Server
 
 * JBoss A-MQ 7.x (Artemis)
 * For STOMP, AMQP, MQTT & OpenWire protocols
@@ -621,7 +622,7 @@ public class MyMDB implements MessageListener {
 <1> standard portable property to lookup the connection factory
 <2> standard portable property to lookup the destination
 
-== Remote JBoss A-MQ 7 Provider [1/4]
+== Remote JBoss A-MQ 7 Server [1/4]
 
 [source,java]
 ----
@@ -633,7 +634,7 @@ public class MyMDB implements MessageListener {
 ----
 <1> Artemis multi-protocol port (including Core protocol)
 
-== Remote JBoss A-MQ 7 Provider [2/4]
+== Remote JBoss A-MQ 7 Server [2/4]
 
 * MDB Inbound Configuration
 
@@ -652,7 +653,7 @@ public class MyMDB implements MessageListener {
 }
 ----
 
-== Remote JBoss A-MQ 7 Provider [3/4]
+== Remote JBoss A-MQ 7 Server [3/4]
 
 * Outbound Connection Factory
 
@@ -663,7 +664,7 @@ public class MyMDB implements MessageListener {
  private JMSContext context;
 ----
 
-== Remote JBoss A-MQ 7 Provider [4/4]
+== Remote JBoss A-MQ 7 Server [4/4]
 
 * disable JNDI lookup (on local EAP7 server)
 
